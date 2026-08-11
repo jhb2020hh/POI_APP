@@ -7,6 +7,8 @@ export interface User {
   display_name: string;
   role: string;
   created_at: string;
+  /** 0 = wartet auf Freischaltung durch einen Admin, 1 = freigeschaltet. */
+  approved: number;
 }
 
 /**
@@ -40,9 +42,11 @@ export async function createUser(input: {
   }
 
   try {
+    // Von einem Admin angelegt - also bereits freigeschaltet. Nur die
+    // Selbstregistrierung landet in der Warteschlange (siehe ensureProfile).
     await db
       .prepare(
-        "INSERT INTO users (id, email, display_name, role) VALUES (?, ?, ?, ?)"
+        "INSERT INTO users (id, email, display_name, role, approved) VALUES (?, ?, ?, ?, 1)"
       )
       .run(data.user.id, input.email, input.displayName, role);
   } catch (dbError) {
@@ -76,29 +80,73 @@ export async function listUsers(): Promise<UserSummary[]> {
 
 /**
  * Legt die Profilzeile fuer einen bereits existierenden Auth-Nutzer an.
- * Greift beim ersten Login von Konten, die direkt in der Supabase-Oberflaeche
- * angelegt wurden - ohne das haetten sie kein Profil und damit keine Rolle.
+ *
+ * Greift bei Konten, die nicht ueber createUser entstanden sind: per
+ * Selbstregistrierung oder direkt in der Supabase-Oberflaeche angelegt. Ohne
+ * Profil haetten sie keine Rolle.
+ *
+ * Solche Konten bekommen die niedrigste Rolle und bleiben gesperrt, bis ein
+ * Admin sie freischaltet. Der Standard ist bewusst die restriktive Annahme -
+ * ein Konto, das durch eine Luecke hier landet, kann so nichts anrichten.
  */
 export async function ensureProfile(input: {
   id: string;
   email: string;
   displayName?: string;
   role?: string;
+  approved?: boolean;
 }): Promise<User> {
   const existing = await getUserById(input.id);
   if (existing) return existing;
 
   await db
     .prepare(
-      `INSERT INTO users (id, email, display_name, role) VALUES (?, ?, ?, ?)
+      `INSERT INTO users (id, email, display_name, role, approved) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (id) DO NOTHING`
     )
     .run(
       input.id,
       input.email,
       input.displayName ?? input.email,
-      input.role ?? "extern"
+      input.role ?? "extern",
+      input.approved ? 1 : 0
     );
 
   return (await getUserById(input.id))!;
+}
+
+/** Konten, die auf Freischaltung warten - aelteste zuerst. */
+export async function listPendingUsers(): Promise<UserSummary[]> {
+  return db
+    .prepare(
+      `SELECT id, email, display_name, role FROM users
+       WHERE approved = 0 ORDER BY created_at ASC`
+    )
+    .all<UserSummary>();
+}
+
+export async function setUserApproved(
+  id: string,
+  approved: boolean
+): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE users SET approved = ? WHERE id = ?")
+    .run(approved ? 1 : 0, id);
+  return result.changes > 0;
+}
+
+/**
+ * Entfernt ein Konto vollstaendig - Profil und Anmeldedaten.
+ *
+ * Reihenfolge bewusst: erst das Profil, dann der Auth-Nutzer. Bricht es
+ * dazwischen ab, bleibt ein Konto ohne Profil zurueck, das beim naechsten
+ * Anmelden wieder in der Warteschlange landet. Andersherum bliebe ein Profil
+ * ohne Anmeldemoeglichkeit stehen, das niemand mehr aufraeumt.
+ */
+export async function deleteUser(id: string): Promise<void> {
+  await db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+  if (error) {
+    throw new Error(`Konto konnte nicht entfernt werden: ${error.message}`);
+  }
 }

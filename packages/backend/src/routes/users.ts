@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import {
   createUser,
+  deleteUser,
   getUserByEmail,
   getUserById,
+  listPendingUsers,
   listUsers,
+  setUserApproved,
 } from "../repositories/userRepository.js";
 import { requireRole, ROLES } from "../authorization.js";
 
@@ -28,6 +31,57 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
   server.get("/api/users", async () => {
     return listUsers();
   });
+
+  // Konten aus der Selbstregistrierung, die auf Freischaltung warten.
+  server.get(
+    "/api/users/pending",
+    { preHandler: requireRole(["admin"]) },
+    async () => {
+      return listPendingUsers();
+    }
+  );
+
+  server.post<{ Params: { id: string } }>(
+    "/api/users/:id/approve",
+    { preHandler: requireRole(["admin"]) },
+    async (request, reply) => {
+      const geaendert = await setUserApproved(request.params.id, true);
+      if (!geaendert) {
+        return reply.status(404).send({ error: "Nutzer nicht gefunden" });
+      }
+      return reply.status(204).send();
+    }
+  );
+
+  /**
+   * Ablehnen entfernt das Konto vollstaendig.
+   *
+   * Ein bloss gesperrtes Konto koennte sich weiter anmelden und liefe bei jedem
+   * Versuch in dieselbe Meldung, ohne dass jemand etwas daran aendert. Wer
+   * faelschlich abgelehnt wurde, registriert sich schlicht neu.
+   */
+  server.delete<{ Params: { id: string } }>(
+    "/api/users/:id",
+    { preHandler: requireRole(["admin"]) },
+    async (request, reply) => {
+      const profil = await getUserById(request.params.id);
+      if (!profil) {
+        return reply.status(404).send({ error: "Nutzer nicht gefunden" });
+      }
+      if (profil.id === request.user.sub) {
+        return reply
+          .status(400)
+          .send({ error: "Das eigene Konto kann nicht entfernt werden" });
+      }
+      try {
+        await deleteUser(profil.id);
+      } catch (error) {
+        server.log.error({ error }, "Konto konnte nicht entfernt werden");
+        return reply.status(502).send({ error: "Konto konnte nicht entfernt werden" });
+      }
+      return reply.status(204).send();
+    }
+  );
 
   server.post<{
     Body: { email: string; password: string; displayName: string; role: string };

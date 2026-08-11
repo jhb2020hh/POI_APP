@@ -90,6 +90,19 @@ export default fp(async function authPlugin(server: FastifyInstance) {
         profile = await ensureProfile({ id: userId, email, role: metadataRole });
       }
 
+      // Selbstregistrierte Konten bleiben gesperrt, bis ein Admin sie
+      // freischaltet. Eigener Fehlercode, damit das Frontend "wartet auf
+      // Freischaltung" von "keine Berechtigung" unterscheiden kann - sonst
+      // stuende der Nutzer vor einer Meldung, die ihn zum Support schickt,
+      // obwohl er nur warten muss.
+      if (!profile.approved) {
+        return reply.status(403).send({
+          error:
+            "Dein Zugang wurde noch nicht freigeschaltet. Ein Administrator prüft die Anmeldung.",
+          code: "NICHT_FREIGESCHALTET",
+        });
+      }
+
       request.user = {
         sub: profile.id,
         email: profile.email,

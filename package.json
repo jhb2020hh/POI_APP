@@ -18,6 +18,7 @@
     "setup:storage": "npm run setup:storage -w packages/backend",
     "db:inspect": "npm run db:inspect -w packages/backend",
     "diagnose:upload": "npm run diagnose:upload -w packages/backend",
+    "diagnose:registrierung": "npm run diagnose:registrierung -w packages/backend",
     "seed:admin": "npm run seed:admin -w packages/backend",
     "set:password": "npm run set:password -w packages/backend",
     "set:role": "npm run set:role -w packages/backend"

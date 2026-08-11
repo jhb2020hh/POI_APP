@@ -86,6 +86,26 @@ ist trotzdem nötig: Supabase kennt die anwendungseigenen Rollen nicht. Ein
 Konto ohne Profilzeile bekommt beim ersten Anmelden die Standardrolle `extern`
 und damit kaum Rechte.
 
+### Selbstregistrierung
+
+Auf dem Anmeldebildschirm gibt es einen Reiter „Registrieren". Ein so
+angelegtes Konto bekommt die niedrigste Rolle (`extern`) und ist **gesperrt**,
+bis ein Admin es freischaltet — bis dahin scheitert jede Anmeldung mit einem
+entsprechenden Hinweis. Die Freischaltung erfolgt im Admin-Menü unter
+„Nutzer": offene Anträge stehen dort ganz oben. „Ablehnen" entfernt das Konto
+vollständig; ein bloß gesperrtes Konto liefe sonst bei jedem Anmeldeversuch in
+dieselbe Meldung, ohne dass sich etwas ändert.
+
+Auch nach der Freischaltung sieht ein `extern`-Konto nichts, solange es keinem
+Projekt zugeordnet ist.
+
+In Supabase muss dafür unter *Authentication → Sign In / Providers* die
+Registrierung erlaubt und die E-Mail-Bestätigung eingeschaltet sein.
+
+Prüfen lässt sich die ganze Kette mit `npm run diagnose:registrierung` — das
+Skript legt zwei Wegwerf-Konten an, spielt Sperre und Freischaltung durch und
+räumt hinterher auf.
+
 ### Rolle ändern
 
 ```bash

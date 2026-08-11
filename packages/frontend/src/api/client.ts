@@ -120,25 +120,49 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
  * kommt etwas anderes zurueck, hat die Anfrage sie nie erreicht und das Problem
  * liegt eine Ebene davor - bei der Auslieferung.
  */
+/**
+ * Fehler der Anwendung. `code` setzt das Backend dort, wo der Aufrufer den Fall
+ * unterscheiden muss - etwa "wartet auf Freischaltung" gegenueber "keine
+ * Berechtigung".
+ */
+export class ApiError extends Error {
+  // Ausgeschriebene Felder statt Parameter-Eigenschaften: die Konfiguration
+  // erlaubt nur Syntax, die sich rein durch Loeschen der Typen entfernen laesst
+  // (erasableSyntaxOnly).
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const beschreibung = `${res.url ? new URL(res.url, location.origin).pathname : "?"} — HTTP ${res.status}`;
 
     const rohtext = await res.text().catch(() => "");
-    let body: { error?: unknown } | undefined;
+    let body: { error?: unknown; code?: unknown } | undefined;
     try {
-      body = JSON.parse(rohtext) as { error?: unknown };
+      body = JSON.parse(rohtext) as { error?: unknown; code?: unknown };
     } catch {
       body = undefined;
     }
 
     if (typeof body?.error === "string") {
-      throw new Error(`${body.error} (${beschreibung})`);
+      const code = typeof body.code === "string" ? body.code : undefined;
+      // Bei einem bekannten Fall bleibt die Meldung unveraendert - sie ist fuer
+      // den Nutzer geschrieben und braucht keinen technischen Zusatz. Sonst
+      // hilft der Pfad beim Eingrenzen.
+      throw new ApiError(code ? body.error : `${body.error} (${beschreibung})`, res.status, code);
     }
     if (body) {
-      throw new Error(`${beschreibung}: ${rohtext.slice(0, 200)}`);
+      throw new ApiError(`${beschreibung}: ${rohtext.slice(0, 200)}`, res.status);
     }
-    throw new Error(`${beschreibung} — keine Antwort der Anwendung`);
+    throw new ApiError(`${beschreibung} — keine Antwort der Anwendung`, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -165,9 +189,56 @@ export async function login(email: string, password: string): Promise<CurrentUse
   }
 
   cachedToken = data.session.access_token;
-  const user = await authFetch("/api/me").then((res) => json<CurrentUser>(res));
-  setCurrentUser(user);
-  return user;
+
+  try {
+    const user = await authFetch("/api/me").then((res) => json<CurrentUser>(res));
+    setCurrentUser(user);
+    return user;
+  } catch (err) {
+    // Anmeldung bei Supabase hat geklappt, die Anwendung laesst den Zugang aber
+    // nicht zu. Die Sitzung wird verworfen - sonst bliebe ein angemeldeter
+    // Zustand zurueck, in dem jede Anfrage scheitert.
+    cachedToken = null;
+    clearCurrentUser();
+    await supabase.auth.signOut();
+    throw err;
+  }
+}
+
+/**
+ * Selbstregistrierung. Das Konto entsteht bei Supabase; Profil und Rolle legt
+ * das Backend beim ersten Anmelden an - gesperrt, bis ein Admin freischaltet.
+ *
+ * Rueckgabe sagt, ob Supabase eine Bestaetigungsmail verschickt hat: ist die
+ * Bestaetigung im Projekt abgeschaltet, gibt es sofort eine Sitzung und der
+ * Hinweis "schau in dein Postfach" waere falsch.
+ */
+export async function register(input: {
+  email: string;
+  password: string;
+  displayName: string;
+}): Promise<{ bestaetigungNoetig: boolean }> {
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      "Die Anwendung ist nicht vollständig konfiguriert (Supabase-Zugangsdaten fehlen). Bitte an die Administration wenden."
+    );
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: input.email,
+    password: input.password,
+    options: { data: { display_name: input.displayName } },
+  });
+
+  if (error) {
+    throw new Error(
+      error.message === "User already registered"
+        ? "Für diese E-Mail-Adresse besteht bereits ein Konto."
+        : error.message
+    );
+  }
+
+  return { bestaetigungNoetig: !data.session };
 }
 
 export async function logout(): Promise<void> {
@@ -225,6 +296,28 @@ export function createUser(input: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   }).then((res) => json(res));
+}
+
+/** Konten aus der Selbstregistrierung, die auf Freischaltung warten. */
+export function listPendingUsers(): Promise<UserSummary[]> {
+  return authFetch("/api/users/pending").then((res) => json(res));
+}
+
+export function approveUser(userId: string): Promise<void> {
+  return authFetch(`/api/users/${userId}/approve`, { method: "POST" }).then(
+    async (res) => {
+      if (!res.ok) await json(res);
+    }
+  );
+}
+
+/** Ablehnen entfernt das Konto vollstaendig - siehe routes/users.ts. */
+export function rejectUser(userId: string): Promise<void> {
+  return authFetch(`/api/users/${userId}`, { method: "DELETE" }).then(
+    async (res) => {
+      if (!res.ok) await json(res);
+    }
+  );
 }
 
 export interface ProjectMember {

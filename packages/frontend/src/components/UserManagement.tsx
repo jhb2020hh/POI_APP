@@ -1,5 +1,11 @@
-import { useState } from 'react'
-import { createUser, type UserSummary } from '../api/client'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  approveUser,
+  createUser,
+  listPendingUsers,
+  rejectUser,
+  type UserSummary,
+} from '../api/client'
 
 interface UserManagementProps {
   users: UserSummary[]
@@ -18,6 +24,43 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
   const [displayName, setDisplayName] = useState('')
   const [role, setRole] = useState('extern')
   const [status, setStatus] = useState('')
+
+  const [offeneAntraege, setOffeneAntraege] = useState<UserSummary[]>([])
+  const [antragStatus, setAntragStatus] = useState('')
+
+  const ladeAntraege = useCallback(() => {
+    listPendingUsers()
+      .then(setOffeneAntraege)
+      .catch((err) => setAntragStatus(`Fehler: ${err instanceof Error ? err.message : err}`))
+  }, [])
+
+  useEffect(() => {
+    ladeAntraege()
+  }, [ladeAntraege])
+
+  async function entscheide(nutzer: UserSummary, freischalten: boolean) {
+    if (
+      !freischalten &&
+      !confirm(`Zugang für ${nutzer.email} ablehnen? Das Konto wird dabei entfernt.`)
+    ) {
+      return
+    }
+    setAntragStatus(freischalten ? 'Wird freigeschaltet…' : 'Wird abgelehnt…')
+    try {
+      if (freischalten) {
+        await approveUser(nutzer.id)
+      } else {
+        await rejectUser(nutzer.id)
+      }
+      setAntragStatus('')
+      ladeAntraege()
+      // Freigeschaltete Konten gehoeren in die Gesamtliste - die laedt der
+      // Aufrufer, weil er sie auch an anderen Stellen verwendet.
+      if (freischalten) onUserCreated()
+    } catch (err) {
+      setAntragStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,6 +81,70 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
 
   return (
     <div>
+      {/* Offene Anträge zuerst: sie sind das Einzige hier, was auf eine Handlung
+          wartet. Ohne offene Anträge bleibt der Bereich unsichtbar. */}
+      {offeneAntraege.length > 0 && (
+        <div
+          className="card"
+          style={{
+            padding: 14,
+            marginBottom: 16,
+            borderColor: 'var(--color-warning)',
+            background: 'var(--color-warning-bg)',
+          }}
+        >
+          <h4 style={{ marginBottom: 4 }}>
+            Wartet auf Freischaltung ({offeneAntraege.length})
+          </h4>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+            Selbst registrierte Zugänge. Bis zur Freischaltung ist keine Anmeldung möglich.
+            Nach dem Freischalten gilt die Rolle „Extern"; Projekte werden separat zugeordnet.
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {offeneAntraege.map((u) => (
+              <li
+                key={u.id}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-surface)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>
+                  <strong>{u.display_name}</strong>{' '}
+                  <span style={{ color: 'var(--color-text-muted)' }}>· {u.email}</span>
+                </span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => entscheide(u, true)}>
+                    Freischalten
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => entscheide(u, false)}>
+                    Ablehnen
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {antragStatus && (
+            <p
+              style={{
+                fontSize: 12,
+                marginTop: 8,
+                color: antragStatus.startsWith('Fehler') ? 'var(--color-danger)' : 'var(--color-text-muted)',
+              }}
+            >
+              {antragStatus}
+            </p>
+          )}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="card" style={{ padding: 14, marginBottom: 16 }}>
         <h4 style={{ marginBottom: 10 }}>Neuen Nutzer anlegen</h4>
         <div className="field-row" style={{ marginBottom: 10 }}>
