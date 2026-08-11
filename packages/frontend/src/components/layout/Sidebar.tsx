@@ -3,6 +3,16 @@ import type { Plan, PlanFolder, Project } from '@poi-app/shared'
 import type { CreateProjectInput } from '../../api/client'
 import { PlanFolderTree } from './PlanFolderTree'
 
+// Sämtliche Ausgaben laufen über diesen einen Bereich. Früher lagen sie an vier
+// verschiedenen Stellen verteilt, teils mit abweichendem Ergebnis.
+type ExportTemplate = 'plaene' | 'abnahmeprotokoll' | 'csv'
+
+const EXPORT_VORLAGEN: { wert: ExportTemplate; beschriftung: string }[] = [
+  { wert: 'plaene', beschriftung: 'Pläne (PDF)' },
+  { wert: 'abnahmeprotokoll', beschriftung: 'Protokoll' },
+  { wert: 'csv', beschriftung: 'CSV' },
+]
+
 interface SidebarProps {
   projects: Project[]
   selectedProjectId: string | null
@@ -27,7 +37,11 @@ interface SidebarProps {
   onShowTicketOverview: () => void
   galleryActive: boolean
   onShowGallery: () => void
+  // Alle drei Ausgaben liefern eine Fehlermeldung als Zeichenkette zurueck -
+  // leer bedeutet Erfolg. So bleibt die Meldung im Export-Bereich stehen,
+  // statt mit ihm zu verschwinden.
   onExportPlans: (planIds: string[], includeTicketPages: boolean) => Promise<string>
+  onExportCsv: () => Promise<string>
   onExportAbnahmeprotokoll: (planIds: string[]) => Promise<void>
 
   onOpenSettings: () => void
@@ -58,6 +72,7 @@ export function Sidebar({
   onShowGallery,
   onExportPlans,
   onExportAbnahmeprotokoll,
+  onExportCsv,
   onOpenSettings,
   onMakeOffline,
   offlineStatus,
@@ -78,7 +93,7 @@ export function Sidebar({
   const [exportSelection, setExportSelection] = useState<string[]>([])
   const [exportStatus, setExportStatus] = useState('')
   const [exportIncludeTickets, setExportIncludeTickets] = useState(false)
-  const [exportTemplate, setExportTemplate] = useState<'plaene' | 'abnahmeprotokoll'>('plaene')
+  const [exportTemplate, setExportTemplate] = useState<ExportTemplate>('plaene')
 
   const [projectsCollapsed, setProjectsCollapsed] = useState(false)
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
@@ -135,30 +150,47 @@ export function Sidebar({
     )
   }
 
+  function schliesseExport() {
+    setExportMode(false)
+    setExportSelection([])
+  }
+
   async function handleExportSelected() {
+    // CSV betrifft das ganze Projekt, nicht einzelne Zeichnungen - daher ohne
+    // Planauswahl.
+    if (exportTemplate === 'csv') {
+      setExportStatus('Erzeuge CSV…')
+      try {
+        const fehler = await onExportCsv()
+        setExportStatus(fehler)
+        if (!fehler) schliesseExport()
+      } catch (err) {
+        setExportStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
+      }
+      return
+    }
+
     if (exportSelection.length === 0) return
+
     if (exportTemplate === 'abnahmeprotokoll') {
       setExportStatus('Lade Tickets…')
       try {
         await onExportAbnahmeprotokoll(exportSelection)
         setExportStatus('')
-        setExportMode(false)
-        setExportSelection([])
+        schliesseExport()
       } catch (err) {
-        setExportStatus(`Fehler: ${err}`)
+        setExportStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
       }
       return
     }
+
     setExportStatus('Exportiere…')
     try {
       const summary = await onExportPlans(exportSelection, exportIncludeTickets)
       setExportStatus(summary)
-      if (!summary) {
-        setExportMode(false)
-        setExportSelection([])
-      }
+      if (!summary) schliesseExport()
     } catch (err) {
-      setExportStatus(`Fehler: ${err}`)
+      setExportStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
     }
   }
 
@@ -265,8 +297,7 @@ export function Sidebar({
                   setExportSelection([])
                   setExportStatus('')
                 }}
-                disabled={plans.length === 0}
-                title="Mehrere Pläne als PNG exportieren"
+                title="Pläne, Abnahmeprotokoll oder Ticketliste ausgeben"
               >
                 {exportMode ? 'Abbrechen' : '⬇ Export'}
               </button>
@@ -354,24 +385,30 @@ export function Sidebar({
           {exportMode && (
             <div style={{ padding: '4px 8px 10px' }}>
               <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${exportTemplate === 'plaene' ? 'btn-primary' : 'btn-ghost-inverse'}`}
-                  style={{ flex: 1 }}
-                  onClick={() => setExportTemplate('plaene')}
-                >
-                  Pläne (PDF)
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${exportTemplate === 'abnahmeprotokoll' ? 'btn-primary' : 'btn-ghost-inverse'}`}
-                  style={{ flex: 1 }}
-                  onClick={() => setExportTemplate('abnahmeprotokoll')}
-                >
-                  Abnahmeprotokoll
-                </button>
+                {EXPORT_VORLAGEN.map((vorlage) => (
+                  <button
+                    key={vorlage.wert}
+                    type="button"
+                    className={`btn btn-sm ${exportTemplate === vorlage.wert ? 'btn-primary' : 'btn-ghost-inverse'}`}
+                    style={{ flex: 1 }}
+                    onClick={() => {
+                      setExportTemplate(vorlage.wert)
+                      setExportStatus('')
+                    }}
+                  >
+                    {vorlage.beschriftung}
+                  </button>
+                ))}
               </div>
-              {exportTemplate === 'plaene' ? (
+
+              {/* Alle Ausgaben richten sich nach den Filtern der Werkzeugleiste.
+                  Ohne diesen Hinweis waere nicht erkennbar, warum ein Export
+                  weniger Tickets enthaelt als erwartet. */}
+              <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
+                Es werden die Tickets ausgegeben, die durch die aktuell gesetzten Filter sichtbar sind.
+              </p>
+
+              {exportTemplate === 'plaene' && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--sidebar-text-muted)', marginBottom: 6, cursor: 'pointer' }}>
                   <input
                     type="checkbox"
@@ -380,23 +417,39 @@ export function Sidebar({
                   />
                   Tickets als Anhang beifügen
                 </label>
-              ) : (
+              )}
+              {exportTemplate === 'abnahmeprotokoll' && (
                 <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
-                  Alle Tickets der ausgewählten Zeichnungen fließen ins Protokoll ein. Ort/Datum werden im nächsten Schritt abgefragt.
+                  Ort und Datum werden im nächsten Schritt abgefragt.
                 </p>
               )}
+              {exportTemplate === 'csv' && (
+                <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
+                  Umfasst alle Zeichnungen des Projekts — eine Auswahl im Baum ist dafür nicht nötig.
+                </p>
+              )}
+
               <button
                 type="button"
                 className="btn btn-primary btn-sm btn-block"
                 onClick={handleExportSelected}
-                disabled={exportSelection.length === 0}
+                disabled={exportTemplate !== 'csv' && exportSelection.length === 0}
               >
-                {exportTemplate === 'plaene'
-                  ? `Ausgewählte Pläne exportieren (${exportSelection.length})`
-                  : `Abnahmeprotokoll vorbereiten (${exportSelection.length})`}
+                {exportTemplate === 'plaene' && `Ausgewählte Pläne exportieren (${exportSelection.length})`}
+                {exportTemplate === 'abnahmeprotokoll' && `Abnahmeprotokoll vorbereiten (${exportSelection.length})`}
+                {exportTemplate === 'csv' && 'CSV herunterladen'}
               </button>
               {exportStatus && (
-                <span style={{ fontSize: 12, color: 'var(--sidebar-text-muted)' }}>{exportStatus}</span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: exportStatus.startsWith('Fehler')
+                      ? 'var(--color-danger)'
+                      : 'var(--sidebar-text-muted)',
+                  }}
+                >
+                  {exportStatus}
+                </span>
               )}
             </div>
           )}

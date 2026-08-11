@@ -436,6 +436,12 @@ export async function downloadPointsCsv(
   if (filters.to) params.set("to", filters.to);
   if (filters.status) params.set("status", filters.status);
   if (filters.assignedTo) params.set("assignedTo", filters.assignedTo);
+  // Gewerk und Kategorie wurden hier bisher nicht mitgeschickt, obwohl die
+  // Oberflaeche danach filtert und das Backend sie kennt. Die Datei enthielt
+  // dadurch stillschweigend mehr Zeilen als die angezeigte Tabelle.
+  if (filters.gewerk) params.set("gewerk", filters.gewerk);
+  if (filters.categoryId) params.set("categoryId", filters.categoryId);
+
   const res = await authFetch(
     `/api/projects/${projectId}/points/export.csv?${params.toString()}`
   );

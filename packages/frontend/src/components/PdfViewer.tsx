@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
-import type { Attachment, Category, Plan, Point } from '@poi-app/shared'
-import { getToken, listAttachments, type UserSummary } from '../api/client'
-import { exportPlansToPdf } from '../utils/planExportPdf'
+import type { Category, Point } from '@poi-app/shared'
+import { getToken } from '../api/client'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -17,12 +16,11 @@ const MIN_SCALE = 0.75
 const MAX_SCALE = 4.5
 const SCALE_STEP = 0.375
 
+// plan und users wurden nur fuer den hier entfernten Export gebraucht.
 interface PdfViewerProps {
   fileUrl: string
   points: Point[]
   categories: Category[]
-  plan?: Plan
-  users: UserSummary[]
   selectedPointId?: string
   onCanvasClick: (relX: number, relY: number) => void
   onPointClick: (point: Point) => void
@@ -32,8 +30,6 @@ export function PdfViewer({
   fileUrl,
   points,
   categories,
-  plan,
-  users,
   selectedPointId,
   onCanvasClick,
   onPointClick,
@@ -48,8 +44,6 @@ export function PdfViewer({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
   const [scale, setScale] = useState(DEFAULT_SCALE)
   const [retryCount, setRetryCount] = useState(0)
-  const [includeTicketPages, setIncludeTicketPages] = useState(false)
-  const [exporting, setExporting] = useState(false)
 
   const renderAtScale = useCallback(async (targetScale: number) => {
     const pdf = pdfDocRef.current
@@ -139,22 +133,9 @@ export function PdfViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleExport() {
-    if (!plan) return
-    setExporting(true)
-    try {
-      let attachmentsByPointId: Record<string, Attachment[]> | undefined
-      if (includeTicketPages) {
-        attachmentsByPointId = {}
-        for (const point of points) {
-          attachmentsByPointId[point.id] = await listAttachments(point.id)
-        }
-      }
-      await exportPlansToPdf([{ plan, points, attachmentsByPointId }], { includeTicketPages, categories, users })
-    } finally {
-      setExporting(false)
-    }
-  }
+  // Der Export lag hier frueher ein zweites Mal - mit identischem Ergebnis, aber
+  // ohne Fehlerrueckmeldung: Rueckgabewert und Ausnahmen wurden verworfen.
+  // Saemtliche Ausgaben laufen jetzt ueber den Export-Bereich in der Baumleiste.
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement
@@ -284,24 +265,6 @@ export function PdfViewer({
           title="Zoom zurücksetzen"
         >
           ⟲
-        </button>
-        <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--color-border)' }} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={includeTicketPages}
-            onChange={(e) => setIncludeTicketPages(e.target.checked)}
-          />
-          Tickets als Anhang
-        </label>
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={handleExport}
-          disabled={exporting || !plan}
-          title="Plan mit Pins als PDF exportieren"
-        >
-          {exporting ? '…' : '⬇'}
         </button>
       </div>
     </>

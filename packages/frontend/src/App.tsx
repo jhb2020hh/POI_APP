@@ -304,10 +304,6 @@ function App() {
   const [showReportDialog, setShowReportDialog] = useState(false)
   const [reportPointsOverride, setReportPointsOverride] = useState<PointWithPlan[] | null>(null)
 
-  function toggleReportSelection(id: string) {
-    setReportSelection((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }
-
   async function handleGenerateReport({ ort, datum }: { ort: string; datum: string }) {
     if (!selectedProjectId) return
     const letterhead = await getLetterhead()
@@ -332,14 +328,17 @@ function App() {
   }
 
   // Vom Sidebar-Export ausgeloest: "Abnahmeprotokoll" als Vorlage gewaehlt ->
-  // alle Tickets der ausgewaehlten Plaene laden und den bestehenden
+  // die gefilterten Tickets der ausgewaehlten Plaene laden und den bestehenden
   // Abnahmeprotokoll-Dialog (Ort/Datum) damit vorbelegt oeffnen.
   async function handleExportAbnahmeprotokoll(planIds: string[]) {
     const allPoints: PointWithPlan[] = []
     for (const planId of planIds) {
       const plan = plans.find((p) => p.id === planId)
-      const planPoints = await listPoints(planId)
-      allPoints.push(...planPoints.map((p) => ({ ...p, plan_name: plan?.name ?? null })))
+      const planPoints = await loadFilteredPlanPoints(planId)
+      allPoints.push(...planPoints.map((p) => ({ ...p, plan_name: p.plan_name ?? plan?.name ?? null })))
+    }
+    if (allPoints.length === 0) {
+      throw new Error('Keine Tickets im aktuellen Filter — nichts zu exportieren.')
     }
     setReportPointsOverride(allPoints)
     setReportSelection(allPoints.map((p) => p.id))
@@ -438,12 +437,25 @@ function App() {
     }
   }
 
+  /**
+   * Laedt die Tickets eines Plans so, wie sie gerade gefiltert angezeigt werden.
+   *
+   * Bewusst ueber listProjectPoints und nicht ueber listPoints: nur diese
+   * Variante wertet auch Gewerk und Kategorie aus. listPoints wuerde beide
+   * stillschweigend verwerfen, und der Export enthielte mehr Tickets als die
+   * Ansicht zeigt.
+   */
+  async function loadFilteredPlanPoints(planId: string): Promise<PointWithPlan[]> {
+    if (!selectedProjectId) return []
+    return listProjectPoints(selectedProjectId, { ...currentFilters, planId })
+  }
+
   async function handleExportPlans(planIds: string[], includeTicketPages: boolean): Promise<string> {
     const entries = []
     for (const planId of planIds) {
       const plan = plans.find((p) => p.id === planId)
       if (!plan) continue
-      const planPoints = await listPoints(planId)
+      const planPoints = await loadFilteredPlanPoints(planId)
       let attachmentsByPointId: Record<string, Attachment[]> | undefined
       if (includeTicketPages) {
         attachmentsByPointId = {}
@@ -454,6 +466,16 @@ function App() {
       entries.push({ plan, points: planPoints, attachmentsByPointId })
     }
     return exportPlansToPdf(entries, { includeTicketPages, categories, users })
+  }
+
+  async function handleExportCsv(): Promise<string> {
+    if (!selectedProjectId) return 'Kein Projekt ausgewählt.'
+    try {
+      await downloadPointsCsv(selectedProjectId, currentFilters)
+      return ''
+    } catch (err) {
+      return `Fehler: ${err instanceof Error ? err.message : err}`
+    }
   }
 
   function handleCanvasClick(relX: number, relY: number) {
@@ -601,6 +623,7 @@ function App() {
           }}
           onExportPlans={handleExportPlans}
           onExportAbnahmeprotokoll={handleExportAbnahmeprotokoll}
+          onExportCsv={handleExportCsv}
           onOpenSettings={() => setSettingsOpen(true)}
           onMakeOffline={handleMakeOffline}
           offlineStatus={offlineStatus}
@@ -678,26 +701,9 @@ function App() {
                 >
                   Filter zurücksetzen
                 </button>
-                <div className="toolbar-spacer" />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    downloadPointsCsv(selectedProjectId, currentFilters).catch((err) =>
-                      setSyncStatus(`CSV-Export fehlgeschlagen: ${err}`)
-                    )
-                  }}
-                >
-                  CSV-Export
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={reportSelection.length === 0}
-                  onClick={() => setShowReportDialog(true)}
-                >
-                  Abnahmeprotokoll erstellen ({reportSelection.length})
-                </button>
+                {/* Export-Schaltflaechen entfallen hier: saemtliche Ausgaben
+                    laufen jetzt ueber den Export-Bereich in der Baumleiste und
+                    richten sich nach den hier gesetzten Filtern. */}
               </div>
               <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
                 <TicketOverview
@@ -705,8 +711,6 @@ function App() {
                   categories={categories}
                   users={users}
                   onSelect={handleOverviewSelect}
-                  selectedIds={reportSelection}
-                  onToggleSelect={toggleReportSelection}
                 />
               </div>
             </>
@@ -779,19 +783,6 @@ function App() {
                 >
                   Filter zurücksetzen
                 </button>
-                <div className="toolbar-spacer" />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    if (!selectedProjectId) return
-                    downloadPointsCsv(selectedProjectId, { ...currentFilters, planId: selectedPlanId }).catch((err) =>
-                      setSyncStatus(`CSV-Export fehlgeschlagen: ${err}`)
-                    )
-                  }}
-                >
-                  CSV-Export
-                </button>
               </div>
 
               <div className="plan-workspace">
@@ -800,8 +791,6 @@ function App() {
                     fileUrl={planFileUrl(selectedPlanId)}
                     points={points}
                     categories={categories}
-                    plan={plans.find((p) => p.id === selectedPlanId)}
-                    users={users}
                     selectedPointId={drawer?.mode === 'edit' ? drawer.point.id : undefined}
                     onCanvasClick={handleCanvasClick}
                     onPointClick={handlePointClick}

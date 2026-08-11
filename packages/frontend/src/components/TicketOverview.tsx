@@ -3,18 +3,19 @@ import type { Category } from '@poi-app/shared'
 import type { PointWithPlan, UserSummary } from '../api/client'
 import { Avatar, CategoryBadge, PriorityBadge, StatusBadge } from './ui/Badge'
 
+// Die Auswahlspalte diente allein dem Abnahmeprotokoll aus dieser Ansicht.
+// Saemtliche Ausgaben laufen jetzt ueber den Export-Bereich in der Baumleiste
+// und richten sich nach den gesetzten Filtern.
 interface TicketOverviewProps {
   points: PointWithPlan[]
   categories: Category[]
   users: UserSummary[]
   onSelect: (point: PointWithPlan) => void
-  selectedIds: string[]
-  onToggleSelect: (id: string) => void
 }
 
 type SortKey = 'ticket_number' | 'title' | 'plan_name' | 'status' | 'priority' | 'due_date'
 
-export function TicketOverview({ points, categories, users, onSelect, selectedIds, onToggleSelect }: TicketOverviewProps) {
+export function TicketOverview({ points, categories, users, onSelect }: TicketOverviewProps) {
   const [sortKey, setSortKey] = useState<SortKey>('title')
   const [sortDir, setSortDir] = useState<1 | -1>(1)
   const categoryById = new Map(categories.map((c) => [c.id, c]))
@@ -51,7 +52,6 @@ export function TicketOverview({ points, categories, users, onSelect, selectedId
     <table className="data-table">
       <thead>
         <tr>
-          <th></th>
           <th>{headerButton('ticket_number', 'Ticket-Nr.')}</th>
           <th>{headerButton('title', 'Titel')}</th>
           <th>{headerButton('plan_name', 'Zeichnung')}</th>
@@ -68,9 +68,6 @@ export function TicketOverview({ points, categories, users, onSelect, selectedId
           const assignee = p.assigned_to ? userById.get(p.assigned_to) : undefined
           return (
             <tr key={p.id} onClick={() => onSelect(p)}>
-              <td onClick={(e) => e.stopPropagation()}>
-                <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => onToggleSelect(p.id)} />
-              </td>
               <td style={{ fontSize: 12, color: 'var(--color-text-faint)', whiteSpace: 'nowrap' }}>
                 {p.ticket_number ?? 'wird vergeben'}
               </td>

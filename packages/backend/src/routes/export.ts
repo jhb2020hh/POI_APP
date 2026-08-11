@@ -18,6 +18,9 @@ export async function exportRoutes(server: FastifyInstance): Promise<void> {
 
   server.get<{
     Params: { id: string };
+    // gewerk und categoryId werden von listPointsByProject unterstuetzt und vom
+    // Client mitgeschickt; sie gehoeren deshalb auch in den Typ, sonst sieht es
+    // hier so aus, als wuerden sie nicht ausgewertet.
     Querystring: {
       planId?: string;
       status?: string;
@@ -25,6 +28,8 @@ export async function exportRoutes(server: FastifyInstance): Promise<void> {
       from?: string;
       to?: string;
       assignedTo?: string;
+      gewerk?: string;
+      categoryId?: string;
     };
   }>("/api/projects/:id/points/export.csv", async (request, reply) => {
     const project = await getProjectById(request.params.id);
