@@ -86,6 +86,23 @@ ist trotzdem nötig: Supabase kennt die anwendungseigenen Rollen nicht. Ein
 Konto ohne Profilzeile bekommt beim ersten Anmelden die Standardrolle `extern`
 und damit kaum Rechte.
 
+### Passwort setzen oder zurücksetzen
+
+```bash
+npm run set:password -- <email> [--password=<passwort>]
+```
+
+Ohne `--password` wird eines erzeugt und in `ADMIN-ZUGANGSDATEN.txt`
+geschrieben. Der Befehl beendet anschließend alle bestehenden Sitzungen des
+Kontos — wichtig beim Zurücksetzen wegen eines abgeflossenen Zugangs, denn ein
+Refresh-Token bliebe sonst unbegrenzt gültig.
+
+Die Anwendung selbst hat keine Funktion zum Ändern des eigenen Passworts, und
+ein „Passwort vergessen"-Versand ist nicht eingerichtet (dafür bräuchte das
+Supabase-Projekt einen SMTP-Server). Dieses Skript ist deshalb der vorgesehene
+Weg. Als Notbehelf funktioniert außerdem der Magic Link aus dem
+Supabase-Dashboard.
+
 Weitere Nutzer danach im Admin-Menü der laufenden Anwendung anlegen
 (Rollen: `extern`, `mitarbeiter`, `admin`).
 

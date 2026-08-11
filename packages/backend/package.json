@@ -17,6 +17,7 @@
     "setup:storage": "tsx src/scripts/setupStorage.ts",
     "db:inspect": "tsx src/scripts/inspectDb.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
+    "set:password": "tsx src/scripts/setPassword.ts",
     "seed:templates": "tsx src/scripts/seedTemplates.ts"
   },
   "dependencies": {
