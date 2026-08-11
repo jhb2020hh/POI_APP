@@ -234,6 +234,15 @@ interface SignedUpload {
   token: string;
 }
 
+// Vorgabe des Supabase-Projekts (Free-Tarif: 50 MB). Wird sie ueberschritten,
+// meldet die Ablage das in einer Form, die niemandem weiterhilft - deshalb hier
+// vorab pruefen und im Klartext sagen, woran es liegt.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
  * Laedt die Datei direkt zu Supabase Storage.
  *
@@ -241,13 +250,23 @@ interface SignedUpload {
  * hart auf 4,5 MB begrenzt - Baupläne liegen regelmaessig darueber. Die API
  * stellt deshalb nur eine signierte URL aus und traegt die Datei danach in die
  * Datenbank ein.
+ *
+ * Hinweis zum Inhaltstyp: storage-js verpackt einen Blob - und eine File aus
+ * dem Dateidialog ist einer - in FormData und setzt dabei keinen
+ * content-type-Header. Der Typ, den Supabase sieht, stammt also aus der Datei
+ * selbst; ein hier uebergebener contentType waere im Browser wirkungslos.
  */
 async function uploadToStorage(signed: SignedUpload, file: File): Promise<void> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(
+      `Die Datei ist ${formatMegabytes(file.size)} groß. Erlaubt sind ` +
+        `${formatMegabytes(MAX_UPLOAD_BYTES)}.`
+    );
+  }
+
   const { error } = await supabase.storage
     .from(signed.bucket)
-    .uploadToSignedUrl(signed.path, signed.token, file, {
-      contentType: file.type || "application/octet-stream",
-    });
+    .uploadToSignedUrl(signed.path, signed.token, file);
   if (error) {
     throw new Error(`Datei konnte nicht hochgeladen werden: ${error.message}`);
   }

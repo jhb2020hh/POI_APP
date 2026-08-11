@@ -16,7 +16,9 @@ interface SidebarProps {
   onPlanMoved: (plan: Plan) => void
   selectedPlanId: string | null
   onSelectPlan: (id: string) => void
-  onUploadPlan: (name: string, file: File) => Promise<void>
+  // Gibt zurueck, ob der Upload geklappt hat - das Formular bleibt sonst offen,
+  // damit die Fehlermeldung darin sichtbar bleibt.
+  onUploadPlan: (name: string, file: File) => Promise<boolean>
   planUploadStatus: string
 
   dashboardActive: boolean
@@ -70,6 +72,7 @@ export function Sidebar({
   const [showUploadPlan, setShowUploadPlan] = useState(false)
   const [planName, setPlanName] = useState('')
   const [planFile, setPlanFile] = useState<File | null>(null)
+  const [planFormError, setPlanFormError] = useState('')
 
   const [exportMode, setExportMode] = useState(false)
   const [exportSelection, setExportSelection] = useState<string[]>([])
@@ -104,8 +107,23 @@ export function Sidebar({
 
   async function handleUploadPlan(e: React.FormEvent) {
     e.preventDefault()
-    if (!planName || !planFile) return
-    await onUploadPlan(planName, planFile)
+    // Fehlende Eingaben wurden hier frueher wortlos verworfen - der Klick auf
+    // "Hochladen" blieb dann folgenlos, ohne erkennbaren Grund.
+    if (!planName.trim()) {
+      setPlanFormError('Bitte einen Namen für den Plan angeben.')
+      return
+    }
+    if (!planFile) {
+      setPlanFormError('Bitte eine PDF-Datei auswählen.')
+      return
+    }
+    setPlanFormError('')
+
+    const erfolgreich = await onUploadPlan(planName, planFile)
+    // Nur bei Erfolg schliessen: sonst verschwindet mit dem Formular auch die
+    // Fehlermeldung, die darin angezeigt wird.
+    if (!erfolgreich) return
+
     setPlanName('')
     setPlanFile(null)
     setShowUploadPlan(false)
@@ -269,7 +287,21 @@ export function Sidebar({
               <button type="submit" className="btn btn-primary btn-sm btn-block">
                 Hochladen
               </button>
-              {planUploadStatus && <span style={{ fontSize: 12, color: 'var(--sidebar-text-muted)' }}>{planUploadStatus}</span>}
+              {/* Fehler deutlich abheben - als graue Statuszeile wurde er
+                  bisher wie ein Fortschrittshinweis gelesen. */}
+              {(planFormError || planUploadStatus) && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    color:
+                      planFormError || planUploadStatus.startsWith('Fehler')
+                        ? 'var(--color-danger)'
+                        : 'var(--sidebar-text-muted)',
+                  }}
+                >
+                  {planFormError || planUploadStatus}
+                </span>
+              )}
             </form>
           )}
 

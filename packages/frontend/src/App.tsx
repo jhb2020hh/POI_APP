@@ -420,16 +420,21 @@ function App() {
     }
   }
 
-  async function handleUploadPlan(name: string, file: File) {
-    if (!selectedProjectId) return
+  // Gibt zurueck, ob es geklappt hat. Der Aufrufer muss das wissen: schliesst
+  // er das Formular auch im Fehlerfall, verschwindet die Meldung mit ihm, denn
+  // sie wird innerhalb des Formulars angezeigt.
+  async function handleUploadPlan(name: string, file: File): Promise<boolean> {
+    if (!selectedProjectId) return false
     setPlanUploadStatus('Lädt hoch…')
     try {
       const plan = await uploadPlan(selectedProjectId, name, file)
       setPlans((prev) => [plan, ...prev])
       setSelectedPlanId(plan.id)
       setPlanUploadStatus('')
+      return true
     } catch (err) {
-      setPlanUploadStatus(`Fehler: ${err}`)
+      setPlanUploadStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
+      return false
     }
   }
 

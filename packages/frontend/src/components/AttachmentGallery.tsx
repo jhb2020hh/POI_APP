@@ -51,7 +51,7 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
       setStatus('')
       refresh()
     } catch (err) {
-      setStatus(`Fehler: ${err}`)
+      setStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
     }
     e.target.value = ''
   }
@@ -73,7 +73,17 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
           Offline: Anlagen können erst online hochgeladen werden.
         </p>
       )}
-      {status && <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>{status}</p>}
+      {status && (
+        <p
+          style={{
+            fontSize: 12,
+            color: status.startsWith('Fehler') ? 'var(--color-danger)' : 'var(--color-text-muted)',
+            marginTop: 6,
+          }}
+        >
+          {status}
+        </p>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
         {attachments.map((a) =>
           a.mime_type.startsWith('image/') ? (
