@@ -37,6 +37,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     trustProxy: true,
   });
 
+  // Mitschreiben, welche Routen tatsaechlich registriert werden. Auf Vercel
+  // laesst sich sonst nicht unterscheiden, ob eine 404 daher kommt, dass die
+  // Route fehlt (aelterer Stand ausgeliefert), oder daher, dass die Anfrage die
+  // Function gar nicht erreicht hat.
+  const registrierteRouten: string[] = [];
+  server.addHook("onRoute", (route) => {
+    const methoden = Array.isArray(route.method) ? route.method : [route.method];
+    for (const methode of methoden) {
+      if (methode === "HEAD") continue;
+      registrierteRouten.push(`${methode} ${route.url}`);
+    }
+  });
+
   await server.register(authPlugin);
 
   /**
@@ -73,6 +86,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       status: vollstaendig ? "ok" : "unvollstaendig",
       konfiguration,
       datenbankverbindung,
+      routen: [...registrierteRouten].sort(),
     };
   });
 

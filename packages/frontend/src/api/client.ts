@@ -111,10 +111,34 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   return res;
 }
 
+/**
+ * Wertet eine Antwort aus und macht Fehler benennbar.
+ *
+ * Frueher lautete die Meldung im Zweifel nur "HTTP 404" - ohne zu sagen, welche
+ * Anfrage das war und wer geantwortet hat. Genau diese Unterscheidung ist aber
+ * entscheidend: Antwortet die Anwendung (JSON mit `error`), liegt es an ihr;
+ * kommt etwas anderes zurueck, hat die Anfrage sie nie erreicht und das Problem
+ * liegt eine Ebene davor - bei der Auslieferung.
+ */
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `HTTP ${res.status}`);
+    const beschreibung = `${res.url ? new URL(res.url, location.origin).pathname : "?"} — HTTP ${res.status}`;
+
+    const rohtext = await res.text().catch(() => "");
+    let body: { error?: unknown } | undefined;
+    try {
+      body = JSON.parse(rohtext) as { error?: unknown };
+    } catch {
+      body = undefined;
+    }
+
+    if (typeof body?.error === "string") {
+      throw new Error(`${body.error} (${beschreibung})`);
+    }
+    if (body) {
+      throw new Error(`${beschreibung}: ${rohtext.slice(0, 200)}`);
+    }
+    throw new Error(`${beschreibung} — keine Antwort der Anwendung`);
   }
   return res.json() as Promise<T>;
 }
