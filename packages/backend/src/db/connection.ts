@@ -56,20 +56,60 @@ if (connectionString && /:5432\//.test(connectionString)) {
  */
 const globalForPg = globalThis as typeof globalThis & { __poiPgPool?: pg.Pool };
 
+/**
+ * Trennt die TLS-Einstellung vom Connection-String.
+ *
+ * pg wertet Parameter aus dem Connection-String aus und laesst sie die
+ * explizit uebergebene ssl-Option ueberschreiben. Steht dort sslmode=require -
+ * wie im String, den die Supabase-Integration in Vercel hinterlegt -, wird
+ * streng geprueft, und die Verbindung scheitert an Supabases eigener
+ * Zertifikatskette ("self-signed certificate in certificate chain").
+ *
+ * sslmode wird deshalb aus dem String entfernt und die TLS-Einstellung
+ * ausschliesslich ueber die Pool-Option gesetzt. sslmode=disable bleibt
+ * respektiert.
+ */
+function buildConnectionConfig(dsn: string): {
+  connectionString: string;
+  ssl: pg.PoolConfig["ssl"];
+} {
+  let connectionString = dsn;
+  let sslmode: string | null = null;
+
+  try {
+    const url = new URL(dsn);
+    sslmode = url.searchParams.get("sslmode");
+    if (sslmode) {
+      url.searchParams.delete("sslmode");
+      connectionString = url.toString();
+    }
+  } catch {
+    // Nicht als URL lesbar - dann unveraendert verwenden.
+  }
+
+  if (sslmode === "disable") {
+    return { connectionString, ssl: false };
+  }
+
+  // Supabase erzwingt TLS. Die Zertifikatspruefung ist standardmaessig
+  // entschaerft, weil die Kette von Supabases eigener CA stammt und nicht im
+  // Truststore von Node liegt. Die Uebertragung bleibt verschluesselt. Mit
+  // DATABASE_SSL_STRICT=true laesst sich die volle Pruefung einschalten - dann
+  // muss die Supabase-CA im Truststore hinterlegt sein.
+  return {
+    connectionString,
+    ssl: { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === "true" },
+  };
+}
+
 function createPool(): pg.Pool {
-  const dsn = requireConnection();
+  const { connectionString: dsn, ssl } = buildConnectionConfig(requireConnection());
   return new Pool({
     connectionString: dsn,
     max: 1,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    // Supabase erzwingt TLS. Die Zertifikatspruefung ist standardmaessig entschaerft,
-    // weil die Pooler-Hostnamen je nach Region nicht gegen den Node-Truststore
-    // validieren. Uebertragung bleibt verschluesselt. Mit DATABASE_SSL_STRICT=true
-    // laesst sich die volle Pruefung einschalten.
-    ssl: dsn.includes("sslmode=disable")
-      ? undefined
-      : { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === "true" },
+    ssl,
   });
 }
 
