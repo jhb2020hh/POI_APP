@@ -56,6 +56,23 @@ export async function initAuth(): Promise<void> {
     cachedToken = session?.access_token ?? null;
     if (!session) clearCurrentUser();
   });
+
+  // Es gibt Anmeldewege, die nicht ueber login() laufen - etwa ein Magic Link
+  // oder eine Einladung, bei denen supabase-js die Sitzung direkt aus der URL
+  // uebernimmt. Dann liegt zwar ein Token vor, aber weder Rolle noch
+  // Anzeigename, und die App wuerde als angemeldet gelten ohne zu wissen, wer
+  // da ist. Deshalb wird das Profil hier nachgeladen.
+  if (cachedToken && !getCurrentUser()) {
+    try {
+      const user = await authFetch("/api/me").then((res) => json<CurrentUser>(res));
+      setCurrentUser(user);
+    } catch {
+      // Schlaegt das fehl, bleibt die App beim Anmeldebildschirm - besser als
+      // ein angemeldeter Zustand ohne bekannte Berechtigungen.
+      cachedToken = null;
+      clearCurrentUser();
+    }
+  }
 }
 
 export function getToken(): string | null {
