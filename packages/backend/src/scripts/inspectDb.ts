@@ -1,5 +1,6 @@
 import "../loadEnv.js";
 import { pool } from "../db/connection.js";
+import { supabaseAdmin } from "../supabase.js";
 
 // Diagnosehilfe: zeigt an, was in der Datenbank tatsaechlich angelegt wurde.
 // Nuetzlich nach dem Migrationslauf und wenn unklar ist, ob die Zugriffsregeln
@@ -34,6 +35,23 @@ try {
   await show("Vorbelegte Kategorien", "SELECT id, name FROM categories ORDER BY id");
   await show("Zeitstempel-Format", "SELECT poi_now_iso() AS jetzt");
   await show("Angewandte Migrationen", "SELECT COUNT(*) AS anzahl FROM _migrations");
+  await show("Nutzerprofile", "SELECT email, role FROM users ORDER BY role, email");
+
+  // Die Ablagen muessen privat sein: der Zugriff laeuft ausschliesslich ueber
+  // kurzlebige signierte URLs, die die API nach der Rechtepruefung ausstellt.
+  // Eine oeffentliche Ablage wuerde jeden Bauplan und jedes Baustellenfoto
+  // ueber eine erratbare URL zugaenglich machen.
+  const { data: buckets, error } = await supabaseAdmin.storage.listBuckets();
+  console.log(`\n--- Dateiablagen (${buckets?.length ?? 0}) ---`);
+  if (error) {
+    console.log("  Fehler: " + error.message);
+  } else {
+    for (const bucket of buckets ?? []) {
+      console.log(
+        `  ${bucket.name.padEnd(14)}${bucket.public ? "OEFFENTLICH !!" : "privat"}`
+      );
+    }
+  }
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
