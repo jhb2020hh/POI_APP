@@ -5,6 +5,12 @@ import type { FastifyInstance } from "fastify";
  * Eintrittspunkt fuer Vercel. Alle /api/*-Anfragen landen hier und werden an
  * dieselbe Fastify-Anwendung durchgereicht, die lokal ueber server.ts laeuft.
  *
+ * Die Zuordnung erfolgt ausdruecklich ueber eine rewrites-Regel in vercel.json
+ * und nicht mehr ueber einen Dateinamen wie [...path].ts: dessen
+ * Sammel-Zuordnung deckte in der Praxis nur ein Pfadsegment ab. /api/health
+ * und POST /api/projects funktionierten, /api/projects/:id/plans/upload-url
+ * lief dagegen in Vercels eigene 404-Seite, ohne die Function je zu erreichen.
+ *
  * Die Instanz haengt am Modul-Scope: Vercel friert eine Function-Instanz
  * zwischen Anfragen ein und taut sie wieder auf, sodass der Aufbau nur beim
  * Kaltstart anfaellt. Die Promise wird gespeichert (nicht die fertige App),
@@ -28,10 +34,34 @@ async function getApp(): Promise<FastifyInstance> {
   return appPromise;
 }
 
+/**
+ * Stellt den urspruenglichen Pfad wieder her.
+ *
+ * Die rewrites-Regel leitet /api/<rest> auf diese Function um und haengt <rest>
+ * als __poiPath an. Fastify routet nach request.url - dort stuende sonst der
+ * Zielpfad der Regel und nicht die tatsaechlich angefragte Adresse.
+ *
+ * Fehlt der Parameter, wurde die Function direkt aufgerufen; dann bleibt die
+ * Adresse unveraendert.
+ */
+function urspruenglichePfadWiederherstellen(request: IncomingMessage): void {
+  if (!request.url) return;
+
+  const url = new URL(request.url, "http://localhost");
+  const pfad = url.searchParams.get("__poiPath");
+  if (pfad === null) return;
+
+  url.searchParams.delete("__poiPath");
+  const query = url.searchParams.toString();
+  request.url = `/api/${pfad}${query ? `?${query}` : ""}`;
+}
+
 export default async function handler(
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
+  urspruenglichePfadWiederherstellen(request);
+
   let app: FastifyInstance;
   try {
     app = await getApp();
