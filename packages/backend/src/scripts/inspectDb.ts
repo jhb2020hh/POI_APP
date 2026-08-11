@@ -37,6 +37,22 @@ try {
   await show("Angewandte Migrationen", "SELECT COUNT(*) AS anzahl FROM _migrations");
   await show("Nutzerprofile", "SELECT email, role FROM users ORDER BY role, email");
 
+  // Konten in Supabase Auth. Weicht die Liste von den Nutzerprofilen oben ab,
+  // fehlt einem Konto die Rolle - anmelden koennte es sich trotzdem.
+  const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+  console.log(`\n--- Konten in Supabase Auth (${authUsers?.users.length ?? 0}) ---`);
+  if (authError) {
+    console.log("  Fehler: " + authError.message);
+  } else {
+    for (const authUser of authUsers?.users ?? []) {
+      console.log(
+        `  ${(authUser.email ?? "(ohne E-Mail)").padEnd(36)}` +
+          `angelegt ${authUser.created_at}  ` +
+          `bestaetigt: ${authUser.email_confirmed_at ? "ja" : "nein"}`
+      );
+    }
+  }
+
   // Die Ablagen muessen privat sein: der Zugriff laeuft ausschliesslich ueber
   // kurzlebige signierte URLs, die die API nach der Rechtepruefung ausstellt.
   // Eine oeffentliche Ablage wuerde jeden Bauplan und jedes Baustellenfoto

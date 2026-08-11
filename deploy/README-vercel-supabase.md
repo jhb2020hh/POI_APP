@@ -70,12 +70,21 @@ Einmalig, aus dem Projektstamm mit gesetzter `.env`:
 npm install
 npm run db:migrate       # legt das Schema an (19 Migrationen)
 npm run setup:storage    # legt die privaten Ablagen "plans" und "attachments" an
-npm run seed:admin -- <email> <passwort> "<anzeigename>"
+npm run seed:admin -- <email> "<anzeigename>" [rolle] [--password=<passwort>]
 ```
 
 `seed:admin` legt den Nutzer sowohl in Supabase Auth als auch in der
 Profiltabelle `users` an. Ohne diesen Schritt gibt es kein Konto, mit dem man
 sich anmelden könnte — eine Selbstregistrierung existiert bewusst nicht.
+
+Ohne `--password` wird ein Passwort erzeugt und **nur** in
+`ADMIN-ZUGANGSDATEN.txt` geschrieben (gitignored), nicht auf die Konsole.
+
+**Konto schon im Supabase-Dashboard angelegt?** Dann bindet `seed:admin` es an
+und trägt nur die Rolle nach; das Passwort bleibt unangetastet. Dieser Schritt
+ist trotzdem nötig: Supabase kennt die anwendungseigenen Rollen nicht. Ein
+Konto ohne Profilzeile bekommt beim ersten Anmelden die Standardrolle `extern`
+und damit kaum Rechte.
 
 Weitere Nutzer danach im Admin-Menü der laufenden Anwendung anlegen
 (Rollen: `extern`, `mitarbeiter`, `admin`).
