@@ -36,6 +36,19 @@ eintragen.
 
 ¹ technisch nicht geheim, wird aber nur serverseitig gebraucht.
 
+**Mit der Supabase-Integration in Vercel** muss nichts davon von Hand angelegt
+werden — der Code akzeptiert die Namen, die die Integration vergibt:
+
+| erwartet | Ersatzname aus der Integration |
+|---|---|
+| `DATABASE_URL` | `POSTGRES_URL` |
+| `VITE_SUPABASE_URL` | `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` |
+| `VITE_SUPABASE_ANON_KEY` | `SUPABASE_ANON_KEY`, `SUPABASE_PUBLISHABLE_KEY` |
+
+Zu prüfen bleibt dort nur, dass `POSTGRES_URL` auf **Port 6543** zeigt und dass
+die Variablen auch für *Preview* freigegeben sind, falls Preview-Deployments
+genutzt werden — die Integration setzt sie standardmäßig nur für *Production*.
+
 **Zwei Dinge, die erfahrungsgemäß schiefgehen:**
 
 - **Port 6543, nicht 5432.** Der Direktanschluss (5432) hält je Verbindung eine

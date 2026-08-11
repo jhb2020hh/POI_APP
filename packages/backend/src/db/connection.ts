@@ -9,11 +9,26 @@ const { Pool, types } = pg;
 // String und Vergleiche wie `seq > cursor` wuerden lexikografisch falsch rechnen.
 types.setTypeParser(types.builtins.INT8, (value) => Number(value));
 
-const connectionString = process.env.DATABASE_URL;
+// POSTGRES_URL wird von der Supabase-Integration in Vercel automatisch angelegt.
+// DATABASE_URL hat Vorrang, damit sich der Wert bei Bedarf gezielt uebersteuern
+// laesst, ohne die von der Integration verwalteten Variablen anzufassen.
+const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 if (!connectionString) {
   throw new Error(
-    "DATABASE_URL ist nicht gesetzt. Erwartet wird der Supabase-Connection-String " +
-      "(Transaction Pooler, Port 6543)."
+    "Weder DATABASE_URL noch POSTGRES_URL ist gesetzt. Erwartet wird der " +
+      "Supabase-Connection-String (Transaction Pooler, Port 6543)."
+  );
+}
+
+// Der Direktanschluss (5432) haelt je Verbindung eine eigene Postgres-Sitzung
+// offen. Serverless-Instanzen starten beliebig oft parallel, die verfuegbaren
+// Verbindungen waeren damit schnell erschoepft. Das ist kein Abbruchgrund -
+// lokal ist der Direktanschluss voellig in Ordnung -, aber im Betrieb ein
+// Fehler, der sich sonst erst unter Last als sporadischer Ausfall zeigt.
+if (/:5432\//.test(connectionString)) {
+  console.warn(
+    "[db] Die Verbindung nutzt Port 5432 (Direktanschluss). Fuer den Betrieb " +
+      "auf Vercel wird der Transaction Pooler auf Port 6543 benoetigt."
   );
 }
 
