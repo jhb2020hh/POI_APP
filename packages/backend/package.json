@@ -15,6 +15,7 @@
     "start": "node dist/server.js",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "setup:storage": "tsx src/scripts/setupStorage.ts",
+    "db:inspect": "tsx src/scripts/inspectDb.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "seed:templates": "tsx src/scripts/seedTemplates.ts"
   },

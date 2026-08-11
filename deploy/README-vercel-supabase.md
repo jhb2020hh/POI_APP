@@ -68,7 +68,7 @@ Einmalig, aus dem Projektstamm mit gesetzter `.env`:
 
 ```bash
 npm install
-npm run db:migrate       # legt das Schema an (20 Migrationen)
+npm run db:migrate       # legt das Schema an (19 Migrationen)
 npm run setup:storage    # legt die privaten Ablagen "plans" und "attachments" an
 npm run seed:admin -- <email> <passwort> "<anzeigename>"
 ```
