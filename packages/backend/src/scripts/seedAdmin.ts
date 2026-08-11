@@ -1,3 +1,4 @@
+import "../loadEnv.js";
 import { createUser, getUserByEmail } from "../repositories/userRepository.js";
 import { pool } from "../db/connection.js";
 import { ROLES } from "../authorization.js";

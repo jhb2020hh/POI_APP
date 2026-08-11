@@ -1,3 +1,4 @@
+import "../loadEnv.js";
 import { ATTACHMENTS_BUCKET, PLANS_BUCKET, supabaseAdmin } from "../supabase.js";
 
 // Beide Ablagen sind privat: Zugriff gibt es nur ueber kurzlebige signierte

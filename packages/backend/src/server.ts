@@ -1,3 +1,4 @@
+import "./loadEnv.js";
 import { buildApp } from "./app.js";
 
 // Lokaler Entwicklungsserver. Das Frontend wird dabei von Vite ausgeliefert,

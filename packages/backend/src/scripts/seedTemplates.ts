@@ -1,3 +1,4 @@
+import "../loadEnv.js";
 import { db, pool } from "../db/connection.js";
 import { createCategory } from "../repositories/categoryRepository.js";
 

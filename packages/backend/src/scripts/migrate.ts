@@ -1,3 +1,4 @@
+import "../loadEnv.js";
 import { runMigrations } from "../db/migrate.js";
 import { pool } from "../db/connection.js";
 
