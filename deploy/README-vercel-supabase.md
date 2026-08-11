@@ -90,7 +90,7 @@ Weitere Nutzer danach im Admin-Menü der laufenden Anwendung anlegen
 | Root Directory | Projektstamm (nicht `packages/frontend`) |
 | Build Command | aus [`vercel.json`](../vercel.json) — nicht überschreiben |
 | Output Directory | `packages/frontend/dist` |
-| Region | `fra1` (Frankfurt) |
+| Region | `dub1` (Dublin) |
 
 Alles Nötige steht in `vercel.json`: Build beider Pakete, Auslieferung der SPA,
 Weiterleitung aller Pfade außer `/api/*` auf `index.html`, und `no-store` für

@@ -3,7 +3,7 @@
   "buildCommand": "npm run build:backend && npm run build:frontend",
   "outputDirectory": "packages/frontend/dist",
   "installCommand": "npm install",
-  "regions": ["fra1"],
+  "regions": ["dub1"],
   "functions": {
     "api/[...path].ts": {
       "maxDuration": 30
