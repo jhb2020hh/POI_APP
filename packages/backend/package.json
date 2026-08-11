@@ -18,6 +18,7 @@
     "db:inspect": "tsx src/scripts/inspectDb.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "set:password": "tsx src/scripts/setPassword.ts",
+    "set:role": "tsx src/scripts/setRole.ts",
     "seed:templates": "tsx src/scripts/seedTemplates.ts"
   },
   "dependencies": {

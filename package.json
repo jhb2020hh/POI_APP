@@ -18,7 +18,8 @@
     "setup:storage": "npm run setup:storage -w packages/backend",
     "db:inspect": "npm run db:inspect -w packages/backend",
     "seed:admin": "npm run seed:admin -w packages/backend",
-    "set:password": "npm run set:password -w packages/backend"
+    "set:password": "npm run set:password -w packages/backend",
+    "set:role": "npm run set:role -w packages/backend"
   },
   "allowScripts": {
     "esbuild@0.28.1": true

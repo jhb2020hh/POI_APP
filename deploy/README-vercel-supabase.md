@@ -86,6 +86,17 @@ ist trotzdem nötig: Supabase kennt die anwendungseigenen Rollen nicht. Ein
 Konto ohne Profilzeile bekommt beim ersten Anmelden die Standardrolle `extern`
 und damit kaum Rechte.
 
+### Rolle ändern
+
+```bash
+npm run set:role -- <email> <extern|mitarbeiter|admin>
+```
+
+Die Oberfläche setzt die Rolle nur beim **Anlegen** eines Nutzers; danach wird
+sie nur noch angezeigt. Wer ein Konto direkt im Supabase-Dashboard anlegt,
+bekommt beim ersten Anmelden automatisch `extern` — das fällt nur dadurch auf,
+dass fast nichts sichtbar ist. Dieses Skript ist der Weg, das zu korrigieren.
+
 ### Passwort setzen oder zurücksetzen
 
 ```bash
