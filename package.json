@@ -1,0 +1,18 @@
+{
+  "name": "poi-app",
+  "private": true,
+  "version": "0.2.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w packages/backend",
+    "dev:frontend": "npm run dev -w packages/frontend",
+    "build:backend": "npm run build -w packages/backend",
+    "build:frontend": "npm run build -w packages/frontend"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "bcrypt@6.0.0": true
+  }
+}

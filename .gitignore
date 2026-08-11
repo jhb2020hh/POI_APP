@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+packages/backend/uploads/
+.env
+.env.local
+*.log
+
+# Zugangsdaten (Klartext-Passwoerter) - nicht ins Repository
+ADMIN-ZUGANGSDATEN.txt
+
+# Verirrtes leeres Git-Verzeichnis
+POI_APP/
+
+# Binaerdateien / Projektdokumente (nicht versioniert)
+*.pdf
+*.docx
+*.xlsx
+/Claude TempPOI Appdebug-viewer-error.png
+/Claude TempPOI Appdebug-viewer-screenshot.png

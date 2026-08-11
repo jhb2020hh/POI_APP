@@ -1,0 +1,30 @@
+{
+  "name": "@poi-app/backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
+    "start": "node dist/server.js",
+    "loadtest": "tsx src/scripts/loadtest.ts",
+    "loadtest:points": "tsx src/scripts/loadtestPoints.ts",
+    "seed:admin": "tsx src/scripts/seedAdmin.ts",
+    "seed:templates": "tsx src/scripts/seedTemplates.ts"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^10.1.0",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/static": "^10.1.2",
+    "@fastify/websocket": "^11.2.0",
+    "bcrypt": "^6.0.0",
+    "fastify": "^5.1.0",
+    "fastify-plugin": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

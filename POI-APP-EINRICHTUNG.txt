@@ -1,0 +1,109 @@
+POI-APP - Einrichtung auf dem Niederlassungs-Laptop (derselbe wie die Doku-App)
+================================================================================
+
+Diese App laeuft auf DEMSELBEN Laptop wie die Doku Web App, als zweiter,
+unabhaengiger Server-Prozess auf einem anderen Port (4000 statt 8000). Alle
+Kollegen nutzen sie nur ueber den Browser - es muss also nichts auf jedem
+Einzel-Laptop installiert werden, nur hier auf dem Server.
+
+ADRESSE (im Browser):
+    Derselbe Rechnername/dieselbe IP wie die Doku-App, nur Port 4000 statt
+    8000 - z. B. http://dokuapp:4000 (falls dieser Name schon eingerichtet
+    ist) oder http://<IP-des-Laptops>:4000. Die IP zeigt auch das Start-
+    Fenster ("POI-APP Server starten.cmd") an.
+
+WICHTIG: anders als bei der Doku-App wird der Rechnername HIER NICHT erneut
+gesetzt - das ist schon durch die Doku-App-Einrichtung erledigt (ein Rechner
+hat nur einen Namen). POI-APP nutzt einfach denselben Namen/dieselbe IP,
+nur mit dem eigenen Port.
+
+
+VORAUSSETZUNG (einmalig, falls noch nicht vorhanden)
+-----------------------------------------------------
+Node.js 22 (LTS) oder neuer muss auf diesem Laptop installiert sein:
+offizieller Installer von https://nodejs.org (normale .msi-Installation,
+dafuer gibt es - anders als bei Apache - reguläre Windows-Builds, auch fuer
+ARM64). Kurz pruefen: in einer Eingabeaufforderung  node --version  eingeben.
+
+
+EINMALIGE EINRICHTUNG (durch eine Person mit Administrator-Rechten)
+---------------------------------------------------------------------
+1. Diesen kompletten POI-App-Projektordner auf den Laptop kopieren, z. B.
+   nach  C:\poi-app  (am besten neben den Doku-App-Ordner, nicht hinein).
+
+2. Einmalig in einer Eingabeaufforderung IN DIESEM ORDNER ausfuehren:
+       npm install
+       npm run build:backend
+       npm run build:frontend
+   Das installiert alle Abhaengigkeiten passend zu DIESEM Rechner (wichtig
+   wegen der nativen bcrypt-Bibliothek) und erzeugt die produktiven Ordner
+   packages\backend\dist und packages\frontend\dist.
+
+3. Ersten Nutzer (Administrator) anlegen:
+       npm run seed:admin -w packages/backend -- <email> <passwort> [name]
+   Dieses System hat keine Selbstregistrierung - weitere Nutzer koennen
+   danach ueber die "Nutzer"-Verwaltung im eingeloggten Zustand angelegt
+   werden.
+
+4. Firewall fuer den Zugriff oeffnen (als Administrator):
+   Rechtsklick auf "POI-APP - Firewall Port 4000 oeffnen (Admin).cmd"
+   > "Als Administrator ausfuehren".
+
+5. Autostart einrichten (als Administrator) - damit der Server nach JEDEM
+   Hochfahren von selbst startet, ohne dass sich jemand anmelden muss:
+   Rechtsklick auf "POI-APP - Autostart einrichten (Admin).cmd"
+   > "Als Administrator ausfuehren".
+   - Es wird das Konto vorgeschlagen, unter dem der Server laufen soll
+     (normalerweise einfach ENTER).
+   - Danach EINMAL das Windows-Passwort dieses Kontos eingeben (unsichtbar) -
+     das ist noetig, damit der Server schon VOR der Anmeldung starten kann.
+   Auf Wunsch laesst sich der Server direkt starten (Frage am Ende), sonst
+   startet er ab dem naechsten Neustart automatisch.
+
+
+TAEGLICHER BETRIEB
+------------------
+Nach der Einrichtung laeuft der Server automatisch im Hintergrund (kein Fenster,
+keine Anmeldung noetig). Es ist nichts weiter zu tun.
+
+- Laeuft er? Im Browser  http://<Adresse>:4000/api/health  aufrufen (zeigt
+  {"status":"ok"}) oder einfach die Startseite oeffnen.
+- Was tut der Server / gab es Fehler? Logdatei im Ordner
+      server_log\server-JJJJMMTT.log
+- Server-Status / sofort starten / stoppen (als Admin in der Eingabeaufforderung):
+      schtasks /Query /TN "POI-APP Server"
+      schtasks /Run   /TN "POI-APP Server"
+      schtasks /End   /TN "POI-APP Server"
+- Autostart wieder entfernen: "POI-APP - Autostart entfernen (Admin).cmd".
+
+Manueller Start (nur zur Diagnose, mit sichtbarem Fenster):
+"POI-APP Server starten.cmd". WICHTIG: nicht gleichzeitig mit dem Autostart
+laufen lassen - sonst ist Port 4000 doppelt belegt. Vorher den Task stoppen
+(schtasks /End /TN "POI-APP Server").
+
+
+UPDATE (neue Programmversion einspielen)
+----------------------------------------
+Nur die Programm-Ordner packages\backend\src, packages\frontend\src (und
+die POI-APP-Skripte hier im Hauptordner) ersetzen, dann erneut:
+    npm install
+    npm run build:backend
+    npm run build:frontend
+NICHT anfassen: packages\backend\data.sqlite (alle Projekte/Tickets/Nutzer)
+und die hochgeladenen Plaene/Fotos darunter. Nach dem Update einmal:
+    schtasks /End /TN "POI-APP Server"
+    schtasks /Run /TN "POI-APP Server"
+(oder Rechner neu starten).
+
+
+HINWEISE
+--------
+- Diese Anleitung gilt fuer den lokalen Windows-Laptop (Task-Scheduler-
+  Autostart statt Webserver). Fuer einen spaeteren "echten" Linux-Produktiv-
+  server existiert zusaetzlich eine Apache-Variante in
+  deploy\README-deployment.md - das ist ein ANDERER, bislang unbenutzter Weg
+  und hier nicht relevant.
+- Alle Daten (Projekte, Plaene, Tickets, Nutzer) liegen in
+  packages\backend\data.sqlite plus Upload-Ordnern darunter. Sichern = diese
+  gezielt sichern (node_modules und runtime-Ordner koennen dabei weggelassen
+  werden, die entstehen bei Bedarf neu ueber npm install).
