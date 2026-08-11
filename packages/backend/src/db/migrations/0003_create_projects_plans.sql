@@ -3,7 +3,7 @@ CREATE TABLE projects (
   name TEXT NOT NULL,
   description TEXT,
   created_by TEXT REFERENCES users(id),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT poi_now_iso(),
   archived INTEGER NOT NULL DEFAULT 0
 );
 
@@ -16,7 +16,7 @@ CREATE TABLE plans (
   page_count INTEGER,
   bauabschnitt TEXT,
   uploaded_by TEXT REFERENCES users(id),
-  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+  uploaded_at TEXT NOT NULL DEFAULT poi_now_iso()
 );
 
 CREATE INDEX idx_plans_project ON plans(project_id);

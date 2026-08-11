@@ -9,14 +9,20 @@ export async function statsRoutes(server: FastifyInstance): Promise<void> {
   server.get("/api/projects/stats", async (request) => {
     const projects =
       request.user.role === "admin"
-        ? listProjects()
-        : listProjectsForUser(request.user.sub);
+        ? await listProjects()
+        : await listProjectsForUser(request.user.sub);
 
-    return projects.map((project) => {
-      const points = listPointsByProject(project.id, {
-        assignedTo: scopedAssignedTo(request),
-      });
-      return summarizePointStats(project.id, points);
-    });
+    // Die Abfragen werden gebuendelt abgeschickt. Wie viele davon tatsaechlich
+    // gleichzeitig laufen, bestimmt die Poolgroesse in db/connection.ts (derzeit 1,
+    // passend zum Serverless-Betrieb) - der Code bleibt so aber unveraendert
+    // richtig, falls der Pool spaeter vergroessert wird.
+    return Promise.all(
+      projects.map(async (project) => {
+        const points = await listPointsByProject(project.id, {
+          assignedTo: scopedAssignedTo(request),
+        });
+        return summarizePointStats(project.id, points);
+      })
+    );
   });
 }

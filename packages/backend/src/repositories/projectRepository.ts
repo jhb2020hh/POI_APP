@@ -17,7 +17,7 @@ export interface Project {
   fertigstellung: string | null;
 }
 
-export function createProject(input: {
+export async function createProject(input: {
   name: string;
   description?: string;
   createdBy?: string;
@@ -26,45 +26,47 @@ export function createProject(input: {
   customer?: string;
   status?: string;
   projectLead?: string;
-}): Project {
+}): Promise<Project> {
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO projects
-      (id, name, description, created_by, project_number, address, customer, status, project_lead)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id,
-    input.name,
-    input.description ?? null,
-    input.createdBy ?? null,
-    input.projectNumber ?? null,
-    input.address ?? null,
-    input.customer ?? null,
-    input.status ?? "aktiv",
-    input.projectLead ?? null
-  );
-  return getProjectById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO projects
+        (id, name, description, created_by, project_number, address, customer, status, project_lead)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.name,
+      input.description ?? null,
+      input.createdBy ?? null,
+      input.projectNumber ?? null,
+      input.address ?? null,
+      input.customer ?? null,
+      input.status ?? "aktiv",
+      input.projectLead ?? null
+    );
+  return (await getProjectById(id))!;
 }
 
-export function findProjectByNumber(projectNumber: string): Project | undefined {
-  return db.prepare("SELECT * FROM projects WHERE project_number = ? AND archived = 0").get(projectNumber) as
-    | Project
-    | undefined;
+export async function findProjectByNumber(
+  projectNumber: string
+): Promise<Project | undefined> {
+  return db
+    .prepare("SELECT * FROM projects WHERE project_number = ? AND archived = 0")
+    .get<Project>(projectNumber);
 }
 
-export function getProjectById(id: string): Project | undefined {
-  return db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as
-    | Project
-    | undefined;
+export async function getProjectById(id: string): Promise<Project | undefined> {
+  return db.prepare("SELECT * FROM projects WHERE id = ?").get<Project>(id);
 }
 
-export function listProjects(): Project[] {
+export async function listProjects(): Promise<Project[]> {
   return db
     .prepare("SELECT * FROM projects WHERE archived = 0 ORDER BY created_at DESC")
-    .all() as unknown as Project[];
+    .all<Project>();
 }
 
-export function listProjectsForUser(userId: string): Project[] {
+export async function listProjectsForUser(userId: string): Promise<Project[]> {
   return db
     .prepare(
       `SELECT p.* FROM projects p
@@ -72,27 +74,27 @@ export function listProjectsForUser(userId: string): Project[] {
        WHERE pm.user_id = ? AND p.archived = 0
        ORDER BY p.created_at DESC`
     )
-    .all(userId) as unknown as Project[];
+    .all<Project>(userId);
 }
 
-export function archiveProject(id: string): boolean {
-  const result = db.prepare("UPDATE projects SET archived = 1 WHERE id = ?").run(id);
+export async function archiveProject(id: string): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE projects SET archived = 1 WHERE id = ?")
+    .run(id);
   return result.changes > 0;
 }
 
-export function updateProjectDates(
+export async function updateProjectDates(
   id: string,
   input: { baubeginn?: string | null; fertigstellung?: string | null }
-): Project | undefined {
-  const current = getProjectById(id);
+): Promise<Project | undefined> {
+  const current = await getProjectById(id);
   if (!current) return undefined;
   const baubeginn = "baubeginn" in input ? input.baubeginn ?? null : current.baubeginn;
   const fertigstellung =
     "fertigstellung" in input ? input.fertigstellung ?? null : current.fertigstellung;
-  db.prepare("UPDATE projects SET baubeginn = ?, fertigstellung = ? WHERE id = ?").run(
-    baubeginn,
-    fertigstellung,
-    id
-  );
+  await db
+    .prepare("UPDATE projects SET baubeginn = ?, fertigstellung = ? WHERE id = ?")
+    .run(baubeginn, fertigstellung, id);
   return getProjectById(id);
 }

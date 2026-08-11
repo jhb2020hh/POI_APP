@@ -9,9 +9,13 @@ import {
   softDeletePoint,
   updatePoint,
 } from "../repositories/pointRepository.js";
-import { broadcastToPlan } from "../ws/hub.js";
 import { recordChange } from "../repositories/changeLogRepository.js";
 import { hasRole, requireProjectAccess, scopedAssignedTo } from "../authorization.js";
+
+// Hinweis: Es wird hier nichts mehr aktiv an andere Clients gesendet. Die
+// Live-Aktualisierung laeuft ueber Supabase Realtime, das Aenderungen an der
+// Tabelle `points` direkt aus dem Transaktionslog an die berechtigten Clients
+// verteilt (siehe Migration 0020 und packages/frontend/src/api/socket.ts).
 
 export async function pointRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
@@ -30,11 +34,11 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
     if (!planId) {
       return reply.status(400).send({ error: "planId ist erforderlich" });
     }
-    const plan = getPlanById(planId);
+    const plan = await getPlanById(planId);
     if (!plan) {
       return reply.status(404).send({ error: "Plan nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, plan.project_id)) return;
+    if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
     return listPointsByPlan(planId, {
       bauabschnitt,
       from,
@@ -57,14 +61,14 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
       categoryId?: string;
     };
   }>("/api/projects/:id/points", async (request, reply) => {
-    const project = getProjectById(request.params.id);
+    const project = await getProjectById(request.params.id);
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, project.id)) return;
+    if (!(await requireProjectAccess(request, reply, project.id))) return;
 
     const { planId, bauabschnitt, from, to, status, assignedTo, gewerk, categoryId } = request.query;
-    const points = listPointsByProject(project.id, {
+    const points = await listPointsByProject(project.id, {
       planId,
       bauabschnitt,
       from,
@@ -74,7 +78,7 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
       gewerk,
       categoryId,
     });
-    const plans = listPlansByProject(project.id);
+    const plans = await listPlansByProject(project.id);
     const planNameById = new Map(plans.map((p) => [p.id, p.name]));
     return points.map((point) => ({
       ...point,
@@ -125,15 +129,15 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
         .status(400)
         .send({ error: "id, planId, x, y und title sind erforderlich" });
     }
-    const plan = getPlanById(planId);
+    const plan = await getPlanById(planId);
     if (!plan) {
       return reply.status(404).send({ error: "Plan nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, plan.project_id)) return;
+    if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
-    const point = createPoint({
+    const point = await createPoint({
       id,
       planId,
       x,
@@ -152,13 +156,12 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
       raumBereich,
       createdBy: request.user.sub,
     });
-    recordChange({
+    await recordChange({
       entityType: "point",
       entityId: point.id,
       projectId: plan.project_id,
       op: "create",
     });
-    broadcastToPlan(planId, { type: "point.created", point });
     return reply.status(201).send(point);
   });
 
@@ -182,20 +185,20 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
       version?: number;
     };
   }>("/api/points/:id", async (request, reply) => {
-    const existing = getPointById(request.params.id);
+    const existing = await getPointById(request.params.id);
     if (!existing) {
       return reply.status(404).send({ error: "Punkt nicht gefunden" });
     }
-    const plan = getPlanById(existing.plan_id);
+    const plan = await getPlanById(existing.plan_id);
     if (plan) {
-      if (!requireProjectAccess(request, reply, plan.project_id)) return;
+      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
     }
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
 
     const { version, customFields, ...fields } = request.body;
-    const result = updatePoint(request.params.id, {
+    const result = await updatePoint(request.params.id, {
       ...fields,
       customFields: customFields ? JSON.stringify(customFields) : undefined,
       updatedBy: request.user.sub,
@@ -206,48 +209,43 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
     }
     const { point, conflict, previousValue } = result;
     if (plan) {
-      recordChange({
+      await recordChange({
         entityType: "point",
         entityId: point.id,
         projectId: plan.project_id,
         op: "update",
       });
     }
-    broadcastToPlan(point.plan_id, { type: "point.updated", point });
     return { ...point, conflict, previousValue: conflict ? previousValue : undefined };
   });
 
   server.delete<{ Params: { id: string } }>(
     "/api/points/:id",
     async (request, reply) => {
-      const existing = getPointById(request.params.id);
+      const existing = await getPointById(request.params.id);
       if (!existing) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(existing.plan_id);
+      const plan = await getPlanById(existing.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
 
-      const deleted = softDeletePoint(request.params.id);
+      const deleted = await softDeletePoint(request.params.id);
       if (!deleted) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
       if (plan) {
-        recordChange({
+        await recordChange({
           entityType: "point",
           entityId: existing.id,
           projectId: plan.project_id,
           op: "delete",
         });
       }
-      broadcastToPlan(existing.plan_id, {
-        type: "point.deleted",
-        pointId: existing.id,
-      });
       return reply.status(204).send();
     }
   );

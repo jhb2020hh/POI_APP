@@ -9,6 +9,7 @@ export async function settingsRoutes(server: FastifyInstance): Promise<void> {
     return getLetterhead();
   });
 
+
   server.put<{
     Body: {
       firmaName?: string;

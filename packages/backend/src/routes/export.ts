@@ -27,19 +27,19 @@ export async function exportRoutes(server: FastifyInstance): Promise<void> {
       assignedTo?: string;
     };
   }>("/api/projects/:id/points/export.csv", async (request, reply) => {
-    const project = getProjectById(request.params.id);
+    const project = await getProjectById(request.params.id);
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, project.id)) return;
+    if (!(await requireProjectAccess(request, reply, project.id))) return;
 
-    const points = listPointsByProject(project.id, {
+    const points = await listPointsByProject(project.id, {
       ...request.query,
       assignedTo: scopedAssignedTo(request, request.query.assignedTo),
     });
-    const categories = listCategoriesForProject(project.id);
+    const categories = await listCategoriesForProject(project.id);
     const categoryById = new Map(categories.map((c) => [c.id, c]));
-    const users = listUsers();
+    const users = await listUsers();
     const userById = new Map(users.map((u) => [u.id, u]));
 
     const header = [

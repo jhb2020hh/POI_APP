@@ -14,13 +14,13 @@ export async function pointDetailRoutes(server: FastifyInstance): Promise<void> 
   server.get<{ Params: { id: string } }>(
     "/api/points/:id/history",
     async (request, reply) => {
-      const point = getPointById(request.params.id);
+      const point = await getPointById(request.params.id);
       if (!point) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(point.plan_id);
+      const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       if (request.user.role === "extern" && point.assigned_to !== request.user.sub) {
         return reply.status(403).send({ error: "kein Zugriff auf dieses Ticket" });
@@ -32,13 +32,13 @@ export async function pointDetailRoutes(server: FastifyInstance): Promise<void> 
   server.get<{ Params: { id: string } }>(
     "/api/points/:id/comments",
     async (request, reply) => {
-      const point = getPointById(request.params.id);
+      const point = await getPointById(request.params.id);
       if (!point) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(point.plan_id);
+      const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       if (request.user.role === "extern" && point.assigned_to !== request.user.sub) {
         return reply.status(403).send({ error: "kein Zugriff auf dieses Ticket" });
@@ -50,13 +50,13 @@ export async function pointDetailRoutes(server: FastifyInstance): Promise<void> 
   server.post<{ Params: { id: string }; Body: { body: string } }>(
     "/api/points/:id/comments",
     async (request, reply) => {
-      const point = getPointById(request.params.id);
+      const point = await getPointById(request.params.id);
       if (!point) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(point.plan_id);
+      const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
@@ -64,7 +64,7 @@ export async function pointDetailRoutes(server: FastifyInstance): Promise<void> 
       if (!request.body.body) {
         return reply.status(400).send({ error: "body ist erforderlich" });
       }
-      const comment = createComment({
+      const comment = await createComment({
         pointId: point.id,
         authorId: request.user.sub,
         body: request.body.body,

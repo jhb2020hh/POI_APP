@@ -14,11 +14,11 @@ export async function projectMemberRoutes(server: FastifyInstance): Promise<void
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id/members",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return listMembersForProject(project.id);
     }
   );
@@ -27,15 +27,15 @@ export async function projectMemberRoutes(server: FastifyInstance): Promise<void
     "/api/projects/:id/members",
     { preHandler: requireRole(["admin"]) },
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      const user = getUserByEmail(request.body.email);
+      const user = await getUserByEmail(request.body.email);
       if (!user) {
         return reply.status(404).send({ error: "Nutzer nicht gefunden" });
       }
-      addMember(project.id, user.id);
+      await addMember(project.id, user.id);
       return reply.status(201).send({ projectId: project.id, userId: user.id });
     }
   );
@@ -44,11 +44,11 @@ export async function projectMemberRoutes(server: FastifyInstance): Promise<void
     "/api/projects/:id/members/:userId",
     { preHandler: requireRole(["admin"]) },
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      removeMember(project.id, request.params.userId);
+      await removeMember(project.id, request.params.userId);
       return reply.status(204).send();
     }
   );

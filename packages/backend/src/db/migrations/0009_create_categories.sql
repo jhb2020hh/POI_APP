@@ -6,7 +6,7 @@ CREATE TABLE categories (
   glyph TEXT NOT NULL DEFAULT '!',
   field_schema_json TEXT NOT NULL DEFAULT '{"version":1,"fields":[]}',
   created_by TEXT REFERENCES users(id),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT poi_now_iso(),
   archived INTEGER NOT NULL DEFAULT 0
 );
 

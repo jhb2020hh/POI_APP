@@ -43,10 +43,10 @@ export async function projectRoutes(server: FastifyInstance): Promise<void> {
       if (!projectNumber?.trim()) {
         return reply.status(400).send({ error: "Projektnummer ist erforderlich" });
       }
-      if (findProjectByNumber(projectNumber.trim())) {
+      if (await findProjectByNumber(projectNumber.trim())) {
         return reply.status(409).send({ error: "Projektnummer wird bereits verwendet" });
       }
-      const project = createProject({
+      const project = await createProject({
         name,
         description,
         createdBy: request.user.sub,
@@ -56,7 +56,7 @@ export async function projectRoutes(server: FastifyInstance): Promise<void> {
         status,
         projectLead,
       });
-      addMember(project.id, request.user.sub);
+      await addMember(project.id, request.user.sub);
       return reply.status(201).send(project);
     }
   );
@@ -71,11 +71,11 @@ export async function projectRoutes(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return project;
     }
   );
@@ -87,11 +87,11 @@ export async function projectRoutes(server: FastifyInstance): Promise<void> {
     "/api/projects/:id",
     { preHandler: requireRole(["mitarbeiter", "admin"]) },
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return updateProjectDates(project.id, request.body);
     }
   );
@@ -100,11 +100,11 @@ export async function projectRoutes(server: FastifyInstance): Promise<void> {
     "/api/projects/:id",
     { preHandler: requireRole(["admin"]) },
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      archiveProject(project.id);
+      await archiveProject(project.id);
       return reply.status(204).send();
     }
   );

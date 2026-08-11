@@ -1,0 +1,10 @@
+{
+  // Deckt die Vercel-Functions im Ordner api/ ab. Die Pakete unter packages/
+  // bringen ihre eigene Konfiguration mit und sind hier bewusst nicht enthalten.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["api"]
+}

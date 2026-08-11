@@ -1,0 +1,60 @@
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+import authPlugin from "./plugins/auth.js";
+import { projectRoutes } from "./routes/projects.js";
+import { projectMemberRoutes } from "./routes/projectMembers.js";
+import { userRoutes } from "./routes/users.js";
+import { planRoutes } from "./routes/plans.js";
+import { planFolderRoutes } from "./routes/planFolders.js";
+import { categoryRoutes } from "./routes/categories.js";
+import { pointRoutes } from "./routes/points.js";
+import { attachmentRoutes } from "./routes/attachments.js";
+import { pointDetailRoutes } from "./routes/pointDetails.js";
+import { exportRoutes } from "./routes/export.js";
+import { statsRoutes } from "./routes/stats.js";
+import { offlineRoutes } from "./routes/offline.js";
+import { syncRoutes } from "./routes/sync.js";
+import { settingsRoutes } from "./routes/settings.js";
+
+/**
+ * Baut die Fastify-Anwendung, ohne zu lauschen.
+ *
+ * Getrennt von server.ts, weil dieselbe Anwendung auf zwei Wegen betrieben wird:
+ * lokal ueber server.ts mit einem echten Port, auf Vercel ueber api/[...path].ts
+ * als Serverless-Function ohne eigenen Listener.
+ *
+ * Migrationen laufen hier bewusst nicht mit - sie sind ein eigener Befehl
+ * (npm run db:migrate), sonst wuerde jeder Kaltstart einer Function das Schema
+ * anfassen.
+ */
+export async function buildApp(): Promise<FastifyInstance> {
+  const server = Fastify({
+    logger: true,
+    // Vercel terminiert TLS und setzt X-Forwarded-*. Ohne diese Einstellung
+    // wuerde Fastify die interne Proxy-Adresse als Client-IP protokollieren.
+    trustProxy: true,
+  });
+
+  await server.register(authPlugin);
+
+  server.get("/api/health", async () => {
+    return { status: "ok" };
+  });
+
+  await server.register(projectRoutes);
+  await server.register(projectMemberRoutes);
+  await server.register(userRoutes);
+  await server.register(planRoutes);
+  await server.register(planFolderRoutes);
+  await server.register(categoryRoutes);
+  await server.register(pointRoutes);
+  await server.register(attachmentRoutes);
+  await server.register(pointDetailRoutes);
+  await server.register(exportRoutes);
+  await server.register(statsRoutes);
+  await server.register(offlineRoutes);
+  await server.register(syncRoutes);
+  await server.register(settingsRoutes);
+
+  return server;
+}

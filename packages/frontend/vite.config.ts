@@ -14,16 +14,17 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(rootPackageJson.version),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
   },
+  // Nur noch /api wird weitergereicht. Der fruehere /ws-Proxy entfaellt:
+  // Live-Updates laufen jetzt direkt gegen Supabase Realtime und damit nicht
+  // mehr ueber den eigenen Server.
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
-      '/ws': { target: 'ws://localhost:3001', ws: true },
     },
   },
   preview: {
     proxy: {
       '/api': 'http://localhost:3001',
-      '/ws': { target: 'ws://localhost:3001', ws: true },
     },
   },
 })

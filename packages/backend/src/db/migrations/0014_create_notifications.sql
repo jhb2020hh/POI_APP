@@ -5,7 +5,7 @@ CREATE TABLE notifications (
   recipient_id TEXT REFERENCES users(id),
   type TEXT NOT NULL,
   message TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT poi_now_iso(),
   read_at TEXT
 );
 

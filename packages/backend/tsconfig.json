@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // Die Vercel-Function importiert die gebaute App aus dist/. Ohne
+    // Typdeklarationen waere dieser Import fuer TypeScript ein any.
+    "declaration": true
   },
   "include": ["src"]
 }

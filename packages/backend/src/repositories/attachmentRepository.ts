@@ -12,40 +12,44 @@ export interface Attachment {
   uploaded_at: string;
 }
 
-export function createAttachment(input: {
+export async function createAttachment(input: {
   pointId: string;
   filePath: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
   uploadedBy?: string;
-}): Attachment {
+}): Promise<Attachment> {
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO point_attachments (id, point_id, file_path, file_name, mime_type, size_bytes, uploaded_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id,
-    input.pointId,
-    input.filePath,
-    input.fileName,
-    input.mimeType,
-    input.sizeBytes,
-    input.uploadedBy ?? null
-  );
-  return getAttachmentById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO point_attachments (id, point_id, file_path, file_name, mime_type, size_bytes, uploaded_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.pointId,
+      input.filePath,
+      input.fileName,
+      input.mimeType,
+      input.sizeBytes,
+      input.uploadedBy ?? null
+    );
+  return (await getAttachmentById(id))!;
 }
 
-export function getAttachmentById(id: string): Attachment | undefined {
-  return db.prepare("SELECT * FROM point_attachments WHERE id = ?").get(id) as
-    | Attachment
-    | undefined;
-}
-
-export function listAttachmentsForPoint(pointId: string): Attachment[] {
+export async function getAttachmentById(id: string): Promise<Attachment | undefined> {
   return db
-    .prepare("SELECT * FROM point_attachments WHERE point_id = ? ORDER BY uploaded_at ASC")
-    .all(pointId) as unknown as Attachment[];
+    .prepare("SELECT * FROM point_attachments WHERE id = ?")
+    .get<Attachment>(id);
+}
+
+export async function listAttachmentsForPoint(pointId: string): Promise<Attachment[]> {
+  return db
+    .prepare(
+      "SELECT * FROM point_attachments WHERE point_id = ? ORDER BY uploaded_at ASC"
+    )
+    .all<Attachment>(pointId);
 }
 
 export interface AttachmentWithPoint extends Attachment {
@@ -54,10 +58,10 @@ export interface AttachmentWithPoint extends Attachment {
   category_id: string | null;
 }
 
-export function listAttachmentsByProject(
+export async function listAttachmentsByProject(
   projectId: string,
   filters?: { assignedTo?: string }
-): AttachmentWithPoint[] {
+): Promise<AttachmentWithPoint[]> {
   const conditions = ["plans.project_id = ?", "points.deleted = 0"];
   const params: (string | number)[] = [projectId];
   if (filters?.assignedTo) {
@@ -73,5 +77,5 @@ export function listAttachmentsByProject(
        WHERE ${conditions.join(" AND ")}
        ORDER BY point_attachments.uploaded_at DESC`
     )
-    .all(...params) as unknown as AttachmentWithPoint[];
+    .all<AttachmentWithPoint>(...params);
 }

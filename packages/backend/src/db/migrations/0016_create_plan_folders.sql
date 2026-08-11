@@ -4,7 +4,7 @@ CREATE TABLE plan_folders (
   parent_folder_id TEXT REFERENCES plan_folders(id),
   name TEXT NOT NULL,
   created_by TEXT REFERENCES users(id),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT poi_now_iso()
 );
 
 CREATE INDEX idx_plan_folders_project ON plan_folders(project_id);

@@ -12,24 +12,28 @@ export interface Notification {
   read_at: string | null;
 }
 
-export function createNotification(input: {
+export async function createNotification(input: {
   projectId: string;
   pointId?: string;
   recipientId?: string;
   type: string;
   message: string;
-}): Notification {
+}): Promise<Notification> {
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO notifications (id, project_id, point_id, recipient_id, type, message)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(
-    id,
-    input.projectId,
-    input.pointId ?? null,
-    input.recipientId ?? null,
-    input.type,
-    input.message
-  );
-  return db.prepare("SELECT * FROM notifications WHERE id = ?").get(id) as unknown as Notification;
+  await db
+    .prepare(
+      `INSERT INTO notifications (id, project_id, point_id, recipient_id, type, message)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.projectId,
+      input.pointId ?? null,
+      input.recipientId ?? null,
+      input.type,
+      input.message
+    );
+  return (await db
+    .prepare("SELECT * FROM notifications WHERE id = ?")
+    .get<Notification>(id))!;
 }

@@ -9,26 +9,26 @@ export interface PointComment {
   created_at: string;
 }
 
-export function createComment(input: {
+export async function createComment(input: {
   pointId: string;
   authorId?: string;
   body: string;
-}): PointComment {
+}): Promise<PointComment> {
   const id = randomUUID();
-  db.prepare(
-    `INSERT INTO point_comments (id, point_id, author_id, body) VALUES (?, ?, ?, ?)`
-  ).run(id, input.pointId, input.authorId ?? null, input.body);
-  return getCommentById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO point_comments (id, point_id, author_id, body) VALUES (?, ?, ?, ?)`
+    )
+    .run(id, input.pointId, input.authorId ?? null, input.body);
+  return (await getCommentById(id))!;
 }
 
-export function getCommentById(id: string): PointComment | undefined {
-  return db.prepare("SELECT * FROM point_comments WHERE id = ?").get(id) as
-    | PointComment
-    | undefined;
+export async function getCommentById(id: string): Promise<PointComment | undefined> {
+  return db.prepare("SELECT * FROM point_comments WHERE id = ?").get<PointComment>(id);
 }
 
-export function listCommentsForPoint(pointId: string): PointComment[] {
+export async function listCommentsForPoint(pointId: string): Promise<PointComment[]> {
   return db
     .prepare("SELECT * FROM point_comments WHERE point_id = ? ORDER BY created_at ASC")
-    .all(pointId) as unknown as PointComment[];
+    .all<PointComment>(pointId);
 }

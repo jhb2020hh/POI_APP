@@ -17,11 +17,11 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id/plan-folders",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return listFoldersByProject(project.id);
     }
   );
@@ -30,11 +30,11 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
     Params: { id: string };
     Body: { name: string; parentFolderId?: string | null };
   }>("/api/projects/:id/plan-folders", async (request, reply) => {
-    const project = getProjectById(request.params.id);
+    const project = await getProjectById(request.params.id);
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, project.id)) return;
+    if (!(await requireProjectAccess(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -42,7 +42,7 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
     if (!name) {
       return reply.status(400).send({ error: "name ist erforderlich" });
     }
-    const folder = createFolder({
+    const folder = await createFolder({
       projectId: project.id,
       parentFolderId: parentFolderId ?? null,
       name,
@@ -55,20 +55,20 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
     Params: { id: string };
     Body: { name?: string; parentFolderId?: string | null };
   }>("/api/plan-folders/:id", async (request, reply) => {
-    const folder = getFolderById(request.params.id);
+    const folder = await getFolderById(request.params.id);
     if (!folder) {
       return reply.status(404).send({ error: "Ordner nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, folder.project_id)) return;
+    if (!(await requireProjectAccess(request, reply, folder.project_id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
     let updated = folder;
     if (typeof request.body.name === "string" && request.body.name) {
-      updated = renameFolder(folder.id, request.body.name)!;
+      updated = (await renameFolder(folder.id, request.body.name))!;
     }
     if ("parentFolderId" in request.body) {
-      updated = moveFolder(folder.id, request.body.parentFolderId ?? null)!;
+      updated = (await moveFolder(folder.id, request.body.parentFolderId ?? null))!;
     }
     return updated;
   });
@@ -76,20 +76,20 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
   server.delete<{ Params: { id: string } }>(
     "/api/plan-folders/:id",
     async (request, reply) => {
-      const folder = getFolderById(request.params.id);
+      const folder = await getFolderById(request.params.id);
       if (!folder) {
         return reply.status(404).send({ error: "Ordner nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, folder.project_id)) return;
+      if (!(await requireProjectAccess(request, reply, folder.project_id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
-      if (folderHasChildren(folder.id)) {
+      if (await folderHasChildren(folder.id)) {
         return reply
           .status(409)
           .send({ error: "Ordner ist nicht leer - erst Unterordner/Pläne verschieben oder löschen" });
       }
-      deleteFolder(folder.id);
+      await deleteFolder(folder.id);
       return reply.status(204).send();
     }
   );

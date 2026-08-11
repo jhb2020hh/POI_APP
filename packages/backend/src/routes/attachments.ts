@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { getPointById } from "../repositories/pointRepository.js";
@@ -11,11 +10,12 @@ import {
   listAttachmentsByProject,
   listAttachmentsForPoint,
 } from "../repositories/attachmentRepository.js";
-import { UPLOADS_DIR } from "../uploads.js";
+import { ATTACHMENTS_BUCKET, supabaseAdmin } from "../supabase.js";
 import { hasRole, requireProjectAccess, scopedAssignedTo } from "../authorization.js";
 
 const ALLOWED_MIME_PREFIXES = ["image/"];
 const ALLOWED_MIME_EXACT = ["application/pdf"];
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 function isAllowedMime(mimeType: string): boolean {
   return (
@@ -27,69 +27,99 @@ function isAllowedMime(mimeType: string): boolean {
 export async function attachmentRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
 
-  server.post<{ Params: { id: string } }>(
-    "/api/points/:id/attachments",
+  // Schritt 1: signierte Upload-URL anfordern (siehe Begruendung in plans.ts).
+  server.post<{ Params: { id: string }; Body: { fileName?: string; mimeType?: string } }>(
+    "/api/points/:id/attachments/upload-url",
     async (request, reply) => {
-      const point = getPointById(request.params.id);
+      const point = await getPointById(request.params.id);
       if (!point) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(point.plan_id);
+      const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
 
-      const data = await request.file();
-      if (!data) {
-        return reply.status(400).send({ error: "Datei ist erforderlich" });
-      }
-      if (!isAllowedMime(data.mimetype)) {
-        return reply
-          .status(400)
-          .send({ error: "Nur Bilder oder PDF-Dateien sind erlaubt" });
+      const { fileName, mimeType } = request.body ?? {};
+      if (!mimeType || !isAllowedMime(mimeType)) {
+        return reply.status(400).send({ error: "Nur Bilder oder PDF-Dateien sind erlaubt" });
       }
 
-      const fileId = randomUUID();
-      const extension = path.extname(data.filename) || "";
-      const storedName = `${fileId}${extension}`;
-      const filePath = path.join(UPLOADS_DIR, storedName);
+      const extension = fileName ? path.extname(fileName) : "";
+      const storagePath = `${point.id}/${randomUUID()}${extension}`;
+      const { data, error } = await supabaseAdmin.storage
+        .from(ATTACHMENTS_BUCKET)
+        .createSignedUploadUrl(storagePath);
 
-      let sizeBytes = 0;
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(filePath);
-        data.file.on("data", (chunk) => {
-          sizeBytes += chunk.length;
-        });
-        data.file.pipe(writeStream);
-        writeStream.on("finish", resolve);
-        writeStream.on("error", reject);
-      });
+      if (error || !data) {
+        server.log.error({ error }, "Signierte Upload-URL konnte nicht erzeugt werden");
+        return reply.status(502).send({ error: "Upload konnte nicht vorbereitet werden" });
+      }
 
-      const attachment = createAttachment({
-        pointId: point.id,
-        filePath: storedName,
-        fileName: data.filename,
-        mimeType: data.mimetype,
-        sizeBytes,
-        uploadedBy: request.user.sub,
-      });
-      return reply.status(201).send(attachment);
+      return { bucket: ATTACHMENTS_BUCKET, path: data.path, token: data.token };
     }
   );
+
+  // Schritt 2: hochgeladene Datei als Anhang registrieren.
+  server.post<{
+    Params: { id: string };
+    Body: {
+      filePath?: string;
+      fileName?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+    };
+  }>("/api/points/:id/attachments", async (request, reply) => {
+    const point = await getPointById(request.params.id);
+    if (!point) {
+      return reply.status(404).send({ error: "Punkt nicht gefunden" });
+    }
+    const plan = await getPlanById(point.plan_id);
+    if (plan) {
+      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+    }
+    if (!hasRole(request, ["mitarbeiter", "admin"])) {
+      return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
+    }
+
+    const { filePath, fileName, mimeType, sizeBytes } = request.body ?? {};
+    if (!filePath || !fileName || !mimeType) {
+      return reply
+        .status(400)
+        .send({ error: "filePath, fileName und mimeType sind erforderlich" });
+    }
+    if (!isAllowedMime(mimeType)) {
+      return reply.status(400).send({ error: "Nur Bilder oder PDF-Dateien sind erlaubt" });
+    }
+    // Der Pfad stammt aus Schritt 1 und beginnt immer mit der Punkt-ID.
+    if (!filePath.startsWith(`${point.id}/`)) {
+      return reply.status(400).send({ error: "Ungültiger Dateipfad" });
+    }
+
+    const attachment = await createAttachment({
+      pointId: point.id,
+      filePath,
+      fileName,
+      mimeType,
+      sizeBytes: sizeBytes ?? 0,
+      uploadedBy: request.user.sub,
+    });
+    return reply.status(201).send(attachment);
+  });
 
   server.get<{ Params: { id: string } }>(
     "/api/points/:id/attachments",
     async (request, reply) => {
-      const point = getPointById(request.params.id);
+      const point = await getPointById(request.params.id);
       if (!point) {
         return reply.status(404).send({ error: "Punkt nicht gefunden" });
       }
-      const plan = getPlanById(point.plan_id);
+      const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
       return listAttachmentsForPoint(point.id);
     }
@@ -98,11 +128,11 @@ export async function attachmentRoutes(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id/attachments",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return listAttachmentsByProject(project.id, {
         assignedTo: scopedAssignedTo(request),
       });
@@ -112,18 +142,26 @@ export async function attachmentRoutes(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/attachments/:id/file",
     async (request, reply) => {
-      const attachment = getAttachmentById(request.params.id);
+      const attachment = await getAttachmentById(request.params.id);
       if (!attachment) {
         return reply.status(404).send({ error: "Datei nicht gefunden" });
       }
-      const point = getPointById(attachment.point_id);
-      const plan = point ? getPlanById(point.plan_id) : undefined;
+      const point = await getPointById(attachment.point_id);
+      const plan = point ? await getPlanById(point.plan_id) : undefined;
       if (plan) {
-        if (!requireProjectAccess(request, reply, plan.project_id)) return;
+        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       }
-      const absolutePath = path.join(UPLOADS_DIR, attachment.file_path);
-      reply.header("Content-Type", attachment.mime_type);
-      return reply.send(createReadStream(absolutePath));
+
+      const { data, error } = await supabaseAdmin.storage
+        .from(ATTACHMENTS_BUCKET)
+        .createSignedUrl(attachment.file_path, SIGNED_URL_TTL_SECONDS);
+
+      if (error || !data) {
+        server.log.error({ error }, `Anhang ${attachment.id}: Datei fehlt im Storage`);
+        return reply.status(404).send({ error: "Datei auf dem Server nicht (mehr) vorhanden" });
+      }
+
+      return reply.redirect(data.signedUrl, 302);
     }
   );
 }

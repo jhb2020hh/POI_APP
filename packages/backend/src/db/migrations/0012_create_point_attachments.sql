@@ -6,7 +6,7 @@ CREATE TABLE point_attachments (
   mime_type TEXT NOT NULL,
   size_bytes INTEGER NOT NULL,
   uploaded_by TEXT REFERENCES users(id),
-  uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+  uploaded_at TEXT NOT NULL DEFAULT poi_now_iso()
 );
 
 CREATE INDEX idx_point_attachments_point ON point_attachments(point_id);

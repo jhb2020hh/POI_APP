@@ -1,6 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { getProjectById } from "../repositories/projectRepository.js";
 import {
@@ -9,72 +7,103 @@ import {
   listPlansByProject,
   updatePlanFolder,
 } from "../repositories/planRepository.js";
-import { UPLOADS_DIR } from "../uploads.js";
+import { PLANS_BUCKET, supabaseAdmin } from "../supabase.js";
 import { hasRole, requireProjectAccess } from "../authorization.js";
+
+// Gueltigkeit der Download-Links. Kurz genug, dass ein weitergereichter Link
+// nicht dauerhaft Zugriff gewaehrt, lang genug fuer das Oeffnen grosser Plaene
+// und das Befuellen des Offline-Caches.
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export async function planRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
 
+  /**
+   * Schritt 1 des Uploads: der Client bekommt eine signierte URL und laedt die
+   * Datei direkt zu Supabase Storage.
+   *
+   * Der Umweg ist noetig, weil Vercel Request-Bodies hart auf 4,5 MB begrenzt -
+   * Baupläne liegen regelmaessig darueber und wuerden beim Weg ueber die API
+   * abgewiesen.
+   */
   server.post<{ Params: { id: string } }>(
-    "/api/projects/:id/plans",
+    "/api/projects/:id/plans/upload-url",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
 
-      const data = await request.file();
-      if (!data) {
-        return reply.status(400).send({ error: "PDF-Datei ist erforderlich" });
+      const storagePath = `${project.id}/${randomUUID()}.pdf`;
+      const { data, error } = await supabaseAdmin.storage
+        .from(PLANS_BUCKET)
+        .createSignedUploadUrl(storagePath);
+
+      if (error || !data) {
+        server.log.error({ error }, "Signierte Upload-URL konnte nicht erzeugt werden");
+        return reply.status(502).send({ error: "Upload konnte nicht vorbereitet werden" });
       }
 
-      const nameField = data.fields.name;
-      const name =
-        nameField && "value" in nameField
-          ? String(nameField.value)
-          : data.filename;
-      const bauabschnittField = data.fields.bauabschnitt;
-      const bauabschnitt =
-        bauabschnittField && "value" in bauabschnittField
-          ? String(bauabschnittField.value)
-          : undefined;
-
-      const fileId = randomUUID();
-      const filePath = path.join(UPLOADS_DIR, `${fileId}.pdf`);
-      const hash = createHash("sha256");
-
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(filePath);
-        data.file.on("data", (chunk) => hash.update(chunk));
-        data.file.pipe(writeStream);
-        writeStream.on("finish", resolve);
-        writeStream.on("error", reject);
-      });
-
-      const plan = createPlan({
-        projectId: project.id,
-        name,
-        bauabschnitt,
-        filePath: `${fileId}.pdf`,
-        fileHash: hash.digest("hex"),
-        uploadedBy: request.user.sub,
-      });
-      return reply.status(201).send(plan);
+      return { bucket: PLANS_BUCKET, path: data.path, token: data.token };
     }
   );
+
+  // Schritt 2: die hochgeladene Datei wird als Plan registriert.
+  server.post<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      bauabschnitt?: string;
+      filePath?: string;
+      fileHash?: string;
+    };
+  }>("/api/projects/:id/plans", async (request, reply) => {
+    const project = await getProjectById(request.params.id);
+    if (!project) {
+      return reply.status(404).send({ error: "Projekt nicht gefunden" });
+    }
+    if (!(await requireProjectAccess(request, reply, project.id))) return;
+    if (!hasRole(request, ["mitarbeiter", "admin"])) {
+      return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
+    }
+
+    const { name, bauabschnitt, filePath, fileHash } = request.body ?? {};
+    if (!filePath) {
+      return reply.status(400).send({ error: "filePath ist erforderlich" });
+    }
+    // Der Pfad wird vom Server vergeben und beginnt deshalb immer mit der
+    // Projekt-ID. Die Pruefung verhindert, dass ein Client einen Plan auf eine
+    // Datei eines fremden Projekts zeigen laesst.
+    if (!filePath.startsWith(`${project.id}/`)) {
+      return reply.status(400).send({ error: "Ungültiger Dateipfad" });
+    }
+    if (!name) {
+      return reply.status(400).send({ error: "name ist erforderlich" });
+    }
+
+    const plan = await createPlan({
+      projectId: project.id,
+      name,
+      bauabschnitt,
+      filePath,
+      fileHash,
+      uploadedBy: request.user.sub,
+    });
+    return reply.status(201).send(plan);
+  });
 
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id/plans",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return listPlansByProject(project.id);
     }
   );
@@ -82,11 +111,11 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
   server.patch<{ Params: { id: string }; Body: { folderId?: string | null } }>(
     "/api/plans/:id",
     async (request, reply) => {
-      const plan = getPlanById(request.params.id);
+      const plan = await getPlanById(request.params.id);
       if (!plan) {
         return reply.status(404).send({ error: "Plan nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, plan.project_id)) return;
+      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
@@ -97,10 +126,16 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
     }
   );
 
+  /**
+   * Die Berechtigung wird weiterhin hier geprueft; ausgeliefert wird die Datei
+   * dann per Weiterleitung auf eine kurzlebige, signierte Storage-URL. Der
+   * API-Pfad bleibt dadurch stabil - Service Worker, pdf.js und der PDF-Export
+   * arbeiten unveraendert gegen /api/plans/:id/file.
+   */
   server.get<{ Params: { id: string } }>(
     "/api/plans/:id/file",
     async (request, reply) => {
-      const plan = getPlanById(request.params.id);
+      const plan = await getPlanById(request.params.id);
       if (!plan) {
         server.log.warn(`Plan-Datei angefragt, aber Plan ${request.params.id} existiert nicht`);
         return reply.status(404).send({ error: "Plan nicht gefunden" });
@@ -109,14 +144,21 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
         server.log.warn(`Plan ${plan.id} hat keinen file_path in der Datenbank`);
         return reply.status(404).send({ error: "Für diesen Plan ist keine Datei hinterlegt" });
       }
-      if (!requireProjectAccess(request, reply, plan.project_id)) return;
-      const absolutePath = path.join(UPLOADS_DIR, plan.file_path);
-      if (!existsSync(absolutePath)) {
-        server.log.error(`Plan ${plan.id}: Datenbank verweist auf ${absolutePath}, Datei fehlt auf der Platte`);
+      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+
+      const { data, error } = await supabaseAdmin.storage
+        .from(PLANS_BUCKET)
+        .createSignedUrl(plan.file_path, SIGNED_URL_TTL_SECONDS);
+
+      if (error || !data) {
+        server.log.error(
+          { error },
+          `Plan ${plan.id}: Datenbank verweist auf ${plan.file_path}, Datei fehlt im Storage`
+        );
         return reply.status(404).send({ error: "Datei auf dem Server nicht (mehr) vorhanden" });
       }
-      reply.header("Content-Type", "application/pdf");
-      return reply.send(createReadStream(absolutePath));
+
+      return reply.redirect(data.signedUrl, 302);
     }
   );
 }

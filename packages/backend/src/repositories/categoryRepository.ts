@@ -15,7 +15,7 @@ export interface Category {
   archived: number;
 }
 
-export function createCategory(input: {
+export async function createCategory(input: {
   projectId: string | null;
   name: string;
   color?: string;
@@ -23,58 +23,66 @@ export function createCategory(input: {
   shortCode?: string;
   fieldSchemaJson?: string;
   createdBy?: string;
-}): Category {
+}): Promise<Category> {
   const id = randomUUID();
   const shortCode = (input.shortCode?.trim() || deriveShortCode(input.name)).toUpperCase();
-  db.prepare(
-    `INSERT INTO categories (id, project_id, name, color, glyph, short_code, field_schema_json, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    id,
-    input.projectId,
-    input.name,
-    input.color ?? "#e63946",
-    input.glyph ?? "!",
-    shortCode,
-    input.fieldSchemaJson ?? '{"version":1,"fields":[]}',
-    input.createdBy ?? null
-  );
-  return getCategoryById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO categories (id, project_id, name, color, glyph, short_code, field_schema_json, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      id,
+      input.projectId,
+      input.name,
+      input.color ?? "#e63946",
+      input.glyph ?? "!",
+      shortCode,
+      input.fieldSchemaJson ?? '{"version":1,"fields":[]}',
+      input.createdBy ?? null
+    );
+  return (await getCategoryById(id))!;
 }
 
-export function getCategoryById(id: string): Category | undefined {
-  return db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as
-    | Category
-    | undefined;
+export async function getCategoryById(id: string): Promise<Category | undefined> {
+  return db.prepare("SELECT * FROM categories WHERE id = ?").get<Category>(id);
 }
 
-export function listCategoriesForProject(projectId: string): Category[] {
+export async function listCategoriesForProject(projectId: string): Promise<Category[]> {
   return db
     .prepare(
       "SELECT * FROM categories WHERE archived = 0 AND (project_id IS NULL OR project_id = ?) ORDER BY created_at ASC"
     )
-    .all(projectId) as unknown as Category[];
+    .all<Category>(projectId);
 }
 
-export function listGlobalCategories(): Category[] {
+export async function listGlobalCategories(): Promise<Category[]> {
   return db
-    .prepare("SELECT * FROM categories WHERE project_id IS NULL AND archived = 0 ORDER BY created_at ASC")
-    .all() as unknown as Category[];
+    .prepare(
+      "SELECT * FROM categories WHERE project_id IS NULL AND archived = 0 ORDER BY created_at ASC"
+    )
+    .all<Category>();
 }
 
-export function listArchivedGlobalCategories(): Category[] {
+export async function listArchivedGlobalCategories(): Promise<Category[]> {
   return db
-    .prepare("SELECT * FROM categories WHERE project_id IS NULL AND archived = 1 ORDER BY created_at DESC")
-    .all() as unknown as Category[];
+    .prepare(
+      "SELECT * FROM categories WHERE project_id IS NULL AND archived = 1 ORDER BY created_at DESC"
+    )
+    .all<Category>();
 }
 
-export function archiveCategory(id: string): boolean {
-  const result = db.prepare("UPDATE categories SET archived = 1 WHERE id = ?").run(id);
+export async function archiveCategory(id: string): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE categories SET archived = 1 WHERE id = ?")
+    .run(id);
   return result.changes > 0;
 }
 
-export function unarchiveCategory(id: string): boolean {
-  const result = db.prepare("UPDATE categories SET archived = 0 WHERE id = ?").run(id);
+export async function unarchiveCategory(id: string): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE categories SET archived = 0 WHERE id = ?")
+    .run(id);
   return result.changes > 0;
 }
 
@@ -84,10 +92,10 @@ export interface UsedFieldDef {
   type: string;
 }
 
-export function listUsedFieldDefs(): UsedFieldDef[] {
-  const rows = db.prepare("SELECT field_schema_json FROM categories").all() as {
-    field_schema_json: string;
-  }[];
+export async function listUsedFieldDefs(): Promise<UsedFieldDef[]> {
+  const rows = await db
+    .prepare("SELECT field_schema_json FROM categories")
+    .all<{ field_schema_json: string }>();
   const byKey = new Map<string, UsedFieldDef>();
   for (const row of rows) {
     let parsed: { fields?: { key: string; label: string; type: string }[] };

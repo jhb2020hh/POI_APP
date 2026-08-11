@@ -1,8 +1,5 @@
-import { runMigrations } from "../db/migrate.js";
-import { db } from "../db/connection.js";
+import { db, pool } from "../db/connection.js";
 import { createCategory } from "../repositories/categoryRepository.js";
-
-runMigrations();
 
 const TEMPLATES: { name: string; color: string; glyph: string }[] = [
   { name: "Brandschutzdokumentation", color: "#e63946", glyph: "🔥" },
@@ -12,21 +9,32 @@ const TEMPLATES: { name: string; color: string; glyph: string }[] = [
   { name: "Arbeitssicherheit", color: "#f4a261", glyph: "⚠" },
 ];
 
-const existing = db
-  .prepare("SELECT name FROM categories WHERE project_id IS NULL")
-  .all() as { name: string }[];
-const existingNames = new Set(existing.map((row) => row.name));
+async function main(): Promise<void> {
+  const existing = await db
+    .prepare("SELECT name FROM categories WHERE project_id IS NULL")
+    .all<{ name: string }>();
+  const existingNames = new Set(existing.map((row) => row.name));
 
-for (const template of TEMPLATES) {
-  if (existingNames.has(template.name)) {
-    console.log(`Übersprungen (existiert bereits): ${template.name}`);
-    continue;
+  for (const template of TEMPLATES) {
+    if (existingNames.has(template.name)) {
+      console.log(`Übersprungen (existiert bereits): ${template.name}`);
+      continue;
+    }
+    await createCategory({
+      projectId: null,
+      name: template.name,
+      color: template.color,
+      glyph: template.glyph,
+    });
+    console.log(`Angelegt: ${template.name}`);
   }
-  createCategory({
-    projectId: null,
-    name: template.name,
-    color: template.color,
-    glyph: template.glyph,
-  });
-  console.log(`Angelegt: ${template.name}`);
+}
+
+try {
+  await main();
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
+} finally {
+  await pool.end();
 }

@@ -24,8 +24,8 @@ import {
   saveOfflineBundle,
   setSyncCursor,
 } from "../offline/db";
+import { isSupabaseConfigured, supabase } from "../supabase";
 
-const TOKEN_KEY = "poi_token";
 const CURRENT_USER_KEY = "poi_current_user";
 
 export class AuthError extends Error {}
@@ -37,16 +37,29 @@ export interface CurrentUser {
   role: string;
 }
 
+/**
+ * Der Zugriffstoken wird hier zwischengespeichert, damit getToken() synchron
+ * bleibt: pdf.js, die Bildvorschau und der PDF-Export bauen ihre Header
+ * unmittelbar beim Aufruf zusammen. supabase-js haelt den Wert ueber
+ * onAuthStateChange aktuell, auch nach einer automatischen Erneuerung.
+ *
+ * initAuth() muss einmal vor dem ersten Rendern laufen (siehe main.tsx),
+ * sonst waere direkt nach dem Seitenaufruf noch kein Token bekannt.
+ */
+let cachedToken: string | null = null;
+
+export async function initAuth(): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  cachedToken = data.session?.access_token ?? null;
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    cachedToken = session?.access_token ?? null;
+    if (!session) clearCurrentUser();
+  });
+}
+
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  return cachedToken;
 }
 
 export function getCurrentUser(): CurrentUser | null {
@@ -73,8 +86,9 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(url, { ...options, headers });
   if (res.status === 401) {
-    clearToken();
+    cachedToken = null;
     clearCurrentUser();
+    void supabase.auth.signOut();
     throw new AuthError("nicht authentifiziert");
   }
   return res;
@@ -88,23 +102,37 @@ async function json<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function login(email: string, password: string): Promise<{ token: string; user: CurrentUser }> {
-  return fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  })
-    .then((res) => json<{ token: string; user: CurrentUser }>(res))
-    .then((result) => {
-      setToken(result.token);
-      setCurrentUser(result.user);
-      return result;
-    });
+/**
+ * Die Anmeldung laeuft direkt gegen Supabase. Rolle und Anzeigename kennt
+ * Supabase nicht - die stehen in der Profiltabelle und werden anschliessend
+ * ueber /api/me nachgeladen.
+ */
+export async function login(email: string, password: string): Promise<CurrentUser> {
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      "Die Anwendung ist nicht vollständig konfiguriert (Supabase-Zugangsdaten fehlen). Bitte an die Administration wenden."
+    );
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.session) {
+    throw new Error(
+      error?.message === "Invalid login credentials"
+        ? "E-Mail oder Passwort falsch"
+        : error?.message ?? "Anmeldung fehlgeschlagen"
+    );
+  }
+
+  cachedToken = data.session.access_token;
+  const user = await authFetch("/api/me").then((res) => json<CurrentUser>(res));
+  setCurrentUser(user);
+  return user;
 }
 
-export function logout(): void {
-  clearToken();
+export async function logout(): Promise<void> {
+  cachedToken = null;
   clearCurrentUser();
+  await supabase.auth.signOut();
 }
 
 export function listProjects(): Promise<Project[]> {
@@ -183,19 +211,72 @@ export function listPlans(projectId: string): Promise<Plan[]> {
   return authFetch(`/api/projects/${projectId}/plans`).then((res) => json(res));
 }
 
-export function uploadPlan(
+interface SignedUpload {
+  bucket: string;
+  path: string;
+  token: string;
+}
+
+/**
+ * Laedt die Datei direkt zu Supabase Storage.
+ *
+ * Der Weg ueber die eigene API ist nicht moeglich, weil Vercel Request-Bodies
+ * hart auf 4,5 MB begrenzt - Baupläne liegen regelmaessig darueber. Die API
+ * stellt deshalb nur eine signierte URL aus und traegt die Datei danach in die
+ * Datenbank ein.
+ */
+async function uploadToStorage(signed: SignedUpload, file: File): Promise<void> {
+  const { error } = await supabase.storage
+    .from(signed.bucket)
+    .uploadToSignedUrl(signed.path, signed.token, file, {
+      contentType: file.type || "application/octet-stream",
+    });
+  if (error) {
+    throw new Error(`Datei konnte nicht hochgeladen werden: ${error.message}`);
+  }
+}
+
+// Die Pruefsumme wird nur fuer handliche Dateien berechnet: crypto.subtle
+// braucht den gesamten Inhalt im Speicher, was bei sehr grossen Planen auf
+// Mobilgeraeten zum Abbruch fuehren kann. Das Feld ist rein informativ.
+const HASH_SIZE_LIMIT_BYTES = 25 * 1024 * 1024;
+
+async function computeFileHash(file: File): Promise<string | undefined> {
+  if (file.size > HASH_SIZE_LIMIT_BYTES) return undefined;
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buffer);
+    return [...new Uint8Array(digest)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } catch {
+    return undefined;
+  }
+}
+
+export async function uploadPlan(
   projectId: string,
   name: string,
   file: File,
   bauabschnitt?: string
 ): Promise<Plan> {
-  const formData = new FormData();
-  formData.append("name", name);
-  if (bauabschnitt) formData.append("bauabschnitt", bauabschnitt);
-  formData.append("file", file);
+  const signed = await authFetch(`/api/projects/${projectId}/plans/upload-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: file.name }),
+  }).then((res) => json<SignedUpload>(res));
+
+  await uploadToStorage(signed, file);
+
   return authFetch(`/api/projects/${projectId}/plans`, {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      bauabschnitt,
+      filePath: signed.path,
+      fileHash: await computeFileHash(file),
+    }),
   }).then((res) => json(res));
 }
 
@@ -251,12 +332,26 @@ export function listAttachments(pointId: string): Promise<Attachment[]> {
   return authFetch(`/api/points/${pointId}/attachments`).then((res) => json(res));
 }
 
-export function uploadAttachment(pointId: string, file: File): Promise<Attachment> {
-  const formData = new FormData();
-  formData.append("file", file);
+export async function uploadAttachment(pointId: string, file: File): Promise<Attachment> {
+  const mimeType = file.type || "application/octet-stream";
+
+  const signed = await authFetch(`/api/points/${pointId}/attachments/upload-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: file.name, mimeType }),
+  }).then((res) => json<SignedUpload>(res));
+
+  await uploadToStorage(signed, file);
+
   return authFetch(`/api/points/${pointId}/attachments`, {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filePath: signed.path,
+      fileName: file.name,
+      mimeType,
+      sizeBytes: file.size,
+    }),
   }).then((res) => json(res));
 }
 

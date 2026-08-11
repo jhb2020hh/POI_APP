@@ -16,7 +16,10 @@ export function requireRole(roles: Role[]) {
   };
 }
 
-export function canAccessProject(request: FastifyRequest, projectId: string): boolean {
+export async function canAccessProject(
+  request: FastifyRequest,
+  projectId: string
+): Promise<boolean> {
   if (request.user.role === "admin") return true;
   return isMember(projectId, request.user.sub);
 }
@@ -31,12 +34,12 @@ export function scopedAssignedTo(request: FastifyRequest, requested?: string): s
   return requested;
 }
 
-export function requireProjectAccess(
+export async function requireProjectAccess(
   request: FastifyRequest,
   reply: FastifyReply,
   projectId: string
-): boolean {
-  if (!canAccessProject(request, projectId)) {
+): Promise<boolean> {
+  if (!(await canAccessProject(request, projectId))) {
     reply.status(403).send({ error: "kein Zugriff auf dieses Projekt" });
     return false;
   }

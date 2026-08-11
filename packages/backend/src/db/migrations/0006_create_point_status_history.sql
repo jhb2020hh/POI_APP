@@ -2,7 +2,7 @@ CREATE TABLE point_status_history (
   id TEXT PRIMARY KEY,
   point_id TEXT NOT NULL REFERENCES points(id),
   changed_by TEXT REFERENCES users(id),
-  changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  changed_at TEXT NOT NULL DEFAULT poi_now_iso(),
   field_changed TEXT NOT NULL,
   old_value TEXT,
   new_value TEXT,

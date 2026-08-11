@@ -17,11 +17,11 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/projects/:id/categories",
     async (request, reply) => {
-      const project = getProjectById(request.params.id);
+      const project = await getProjectById(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!requireProjectAccess(request, reply, project.id)) return;
+      if (!(await requireProjectAccess(request, reply, project.id))) return;
       return listCategoriesForProject(project.id);
     }
   );
@@ -36,11 +36,11 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
       fieldSchemaJson?: string;
     };
   }>("/api/projects/:id/categories", async (request, reply) => {
-    const project = getProjectById(request.params.id);
+    const project = await getProjectById(request.params.id);
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!requireProjectAccess(request, reply, project.id)) return;
+    if (!(await requireProjectAccess(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -48,7 +48,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
     if (!name) {
       return reply.status(400).send({ error: "name ist erforderlich" });
     }
-    const category = createCategory({
+    const category = await createCategory({
       projectId: project.id,
       name,
       color,
@@ -79,7 +79,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
     if (!name) {
       return reply.status(400).send({ error: "name ist erforderlich" });
     }
-    const category = createCategory({
+    const category = await createCategory({
       projectId: null,
       name,
       color,
@@ -95,7 +95,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
     "/api/categories/:id",
     { preHandler: requireRole(["admin"]) },
     async (request, reply) => {
-      const archived = archiveCategory(request.params.id);
+      const archived = await archiveCategory(request.params.id);
       if (!archived) {
         return reply.status(404).send({ error: "Vorlage nicht gefunden" });
       }
@@ -111,7 +111,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
     "/api/categories/:id/restore",
     { preHandler: requireRole(["admin"]) },
     async (request, reply) => {
-      const restored = unarchiveCategory(request.params.id);
+      const restored = await unarchiveCategory(request.params.id);
       if (!restored) {
         return reply.status(404).send({ error: "Vorlage nicht gefunden" });
       }

@@ -9,45 +9,45 @@ export interface ChangeLogEntry {
   changed_at: string;
 }
 
-export function recordChange(input: {
+export async function recordChange(input: {
   entityType: string;
   entityId: string;
   projectId: string;
   op: "create" | "update" | "delete";
-}): void {
-  db.prepare(
-    "INSERT INTO change_log (entity_type, entity_id, project_id, op) VALUES (?, ?, ?, ?)"
-  ).run(input.entityType, input.entityId, input.projectId, input.op);
-}
-
-export function getLatestSeq(projectId: string): number {
-  const row = db
+}): Promise<void> {
+  await db
     .prepare(
-      "SELECT MAX(seq) AS maxSeq FROM change_log WHERE project_id = ?"
+      "INSERT INTO change_log (entity_type, entity_id, project_id, op) VALUES (?, ?, ?, ?)"
     )
-    .get(projectId) as { maxSeq: number | null };
-  return row.maxSeq ?? 0;
+    .run(input.entityType, input.entityId, input.projectId, input.op);
 }
 
-export function getChangesSince(
+export async function getLatestSeq(projectId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT MAX(seq) AS maxseq FROM change_log WHERE project_id = ?")
+    .get<{ maxseq: number | null }>(projectId);
+  return row?.maxseq ?? 0;
+}
+
+export async function getChangesSince(
   projectId: string,
   since: number
-): ChangeLogEntry[] {
+): Promise<ChangeLogEntry[]> {
   return db
     .prepare(
       "SELECT * FROM change_log WHERE project_id = ? AND seq > ? ORDER BY seq ASC"
     )
-    .all(projectId, since) as unknown as ChangeLogEntry[];
+    .all<ChangeLogEntry>(projectId, since);
 }
 
-export function getAffectedPointIdsSince(
+export async function getAffectedPointIdsSince(
   projectId: string,
   since: number
-): string[] {
-  const rows = db
+): Promise<string[]> {
+  const rows = await db
     .prepare(
       "SELECT DISTINCT entity_id FROM change_log WHERE project_id = ? AND seq > ? AND entity_type = 'point'"
     )
-    .all(projectId, since) as { entity_id: string }[];
+    .all<{ entity_id: string }>(projectId, since);
   return rows.map((r) => r.entity_id);
 }
