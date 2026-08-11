@@ -13,11 +13,26 @@ types.setTypeParser(types.builtins.INT8, (value) => Number(value));
 // DATABASE_URL hat Vorrang, damit sich der Wert bei Bedarf gezielt uebersteuern
 // laesst, ohne die von der Integration verwalteten Variablen anzufassen.
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-if (!connectionString) {
-  throw new Error(
-    "Weder DATABASE_URL noch POSTGRES_URL ist gesetzt. Erwartet wird der " +
-      "Supabase-Connection-String (Transaction Pooler, Port 6543)."
-  );
+
+/**
+ * Bewusst kein Abbruch beim Laden des Moduls.
+ *
+ * In einer Serverless-Umgebung wuerde ein Fehler an dieser Stelle die ganze
+ * Function unbrauchbar machen: jeder Endpunkt antwortete mit einer
+ * nichtssagenden 500, auch /api/health, mit dem sich die Ursache feststellen
+ * liesse. Stattdessen wird der Zustand festgehalten und erst beim tatsaechlichen
+ * Zugriff mit einer verstaendlichen Meldung abgebrochen.
+ */
+export const isDatabaseConfigured = Boolean(connectionString);
+
+function requireConnection(): string {
+  if (!connectionString) {
+    throw new Error(
+      "Weder DATABASE_URL noch POSTGRES_URL ist gesetzt. Erwartet wird der " +
+        "Supabase-Connection-String (Transaction Pooler, Port 6543)."
+    );
+  }
+  return connectionString;
 }
 
 // Der Direktanschluss (5432) haelt je Verbindung eine eigene Postgres-Sitzung
@@ -25,7 +40,7 @@ if (!connectionString) {
 // Verbindungen waeren damit schnell erschoepft. Das ist kein Abbruchgrund -
 // lokal ist der Direktanschluss voellig in Ordnung -, aber im Betrieb ein
 // Fehler, der sich sonst erst unter Last als sporadischer Ausfall zeigt.
-if (/:5432\//.test(connectionString)) {
+if (connectionString && /:5432\//.test(connectionString)) {
   console.warn(
     "[db] Die Verbindung nutzt Port 5432 (Direktanschluss). Fuer den Betrieb " +
       "auf Vercel wird der Transaction Pooler auf Port 6543 benoetigt."
@@ -41,10 +56,10 @@ if (/:5432\//.test(connectionString)) {
  */
 const globalForPg = globalThis as typeof globalThis & { __poiPgPool?: pg.Pool };
 
-export const pool: pg.Pool =
-  globalForPg.__poiPgPool ??
-  new Pool({
-    connectionString,
+function createPool(): pg.Pool {
+  const dsn = requireConnection();
+  return new Pool({
+    connectionString: dsn,
     max: 1,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
@@ -52,12 +67,31 @@ export const pool: pg.Pool =
     // weil die Pooler-Hostnamen je nach Region nicht gegen den Node-Truststore
     // validieren. Uebertragung bleibt verschluesselt. Mit DATABASE_SSL_STRICT=true
     // laesst sich die volle Pruefung einschalten.
-    ssl: connectionString.includes("sslmode=disable")
+    ssl: dsn.includes("sslmode=disable")
       ? undefined
       : { rejectUnauthorized: process.env.DATABASE_SSL_STRICT === "true" },
   });
+}
 
-globalForPg.__poiPgPool = pool;
+export function getPool(): pg.Pool {
+  if (!globalForPg.__poiPgPool) {
+    globalForPg.__poiPgPool = createPool();
+  }
+  return globalForPg.__poiPgPool;
+}
+
+/**
+ * Weiterleitung auf den erst bei Bedarf erzeugten Pool, damit die vorhandenen
+ * Aufrufstellen (pool.query, pool.connect, pool.end) unveraendert bleiben und
+ * das Modul trotzdem ohne gesetzte Verbindung geladen werden kann.
+ */
+export const pool = new Proxy({} as pg.Pool, {
+  get(_target, property) {
+    const instance = getPool() as unknown as Record<string | symbol, unknown>;
+    const value = instance[property];
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
 
 /**
  * Uebersetzt SQLite-Platzhalter (`?`) in die Postgres-Form (`$1`, `$2`, ...).

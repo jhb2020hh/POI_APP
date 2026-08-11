@@ -18,9 +18,21 @@ declare module "fastify" {
 // oeffentlichen Schluessel; aeltere nutzen ein gemeinsames HS256-Geheimnis.
 // Beides wird unterstuetzt, damit die Umstellung nicht davon abhaengt, wann das
 // Projekt angelegt wurde. Der Schluesselsatz wird von jose zwischengespeichert.
-const jwks = createRemoteJWKSet(
-  new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
-);
+// Erst bei Bedarf aufgebaut: ohne gesetzte SUPABASE_URL wuerde `new URL(...)`
+// schon beim Laden des Moduls fehlschlagen und damit die gesamte Function
+// unbrauchbar machen.
+let jwks: ReturnType<typeof createRemoteJWKSet> | undefined;
+
+function getJwks(): ReturnType<typeof createRemoteJWKSet> {
+  if (!jwks) {
+    if (!SUPABASE_URL) {
+      throw new Error("SUPABASE_URL ist nicht gesetzt.");
+    }
+    jwks = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
+  }
+  return jwks;
+}
+
 const legacySecret = process.env.SUPABASE_JWT_SECRET;
 
 async function verifyAccessToken(token: string): Promise<JWTPayload> {
@@ -39,7 +51,7 @@ async function verifyAccessToken(token: string): Promise<JWTPayload> {
     return payload;
   }
 
-  const { payload } = await jwtVerify(token, jwks);
+  const { payload } = await jwtVerify(token, getJwks());
   return payload;
 }
 

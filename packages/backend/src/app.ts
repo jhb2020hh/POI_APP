@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import authPlugin from "./plugins/auth.js";
+import { db, isDatabaseConfigured } from "./db/connection.js";
+import { isSupabaseConfigured } from "./supabase.js";
 import { projectRoutes } from "./routes/projects.js";
 import { projectMemberRoutes } from "./routes/projectMembers.js";
 import { userRoutes } from "./routes/users.js";
@@ -37,8 +39,41 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await server.register(authPlugin);
 
+  /**
+   * Meldet nicht nur "erreichbar", sondern auch, ob die Umgebung vollstaendig
+   * ist und die Datenbank antwortet. Gemeldet wird ausschliesslich, *ob* ein
+   * Wert gesetzt ist - niemals der Wert selbst.
+   *
+   * Ohne diese Auskunft bleibt bei einer Fehlkonfiguration nur eine 500 ohne
+   * Hinweis, und in einer Serverless-Umgebung kommt man an die Ursache sonst
+   * nur ueber die Protokolle des Anbieters.
+   */
   server.get("/api/health", async () => {
-    return { status: "ok" };
+    const konfiguration = {
+      datenbank: isDatabaseConfigured,
+      supabase: isSupabaseConfigured,
+    };
+
+    let datenbankverbindung: string;
+    if (!isDatabaseConfigured) {
+      datenbankverbindung = "nicht konfiguriert";
+    } else {
+      try {
+        await db.prepare("SELECT 1").get();
+        datenbankverbindung = "ok";
+      } catch (error) {
+        datenbankverbindung = `Fehler: ${(error as Error).message}`;
+      }
+    }
+
+    const vollstaendig =
+      konfiguration.datenbank && konfiguration.supabase && datenbankverbindung === "ok";
+
+    return {
+      status: vollstaendig ? "ok" : "unvollstaendig",
+      konfiguration,
+      datenbankverbindung,
+    };
   });
 
   await server.register(projectRoutes);
