@@ -3,6 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts"
+  "_hinweis": [
+    "main und types zeigen auf dist/, nicht auf src/. Vorher stand hier die",
+    "TypeScript-Quelle: fuer Vite und tsc genuegte das, aber sobald das Backend",
+    "dieses Paket zur Laufzeit importiert, versucht Node die .ts-Datei zu laden",
+    "und bricht mit ERR_MODULE_NOT_FOUND ab. Deshalb muss build:shared vor",
+    "build:backend und build:frontend laufen - siehe Skripte im Projektstamm."
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
 }

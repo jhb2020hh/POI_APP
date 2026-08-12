@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // Das Backend importiert @poi-app/shared zur Laufzeit. Ohne uebersetztes
+    // JavaScript wuerde Node die TypeScript-Quelle zu laden versuchen und mit
+    // ERR_MODULE_NOT_FOUND abbrechen - siehe Kommentar in package.json.
+    "declaration": true
+  },
+  "include": ["src"]
+}
