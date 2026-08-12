@@ -346,14 +346,22 @@ export function listProjectMembers(projectId: string): Promise<ProjectMember[]> 
   return authFetch(`/api/projects/${projectId}/members`).then((res) => json(res));
 }
 
-export function addProjectMember(projectId: string, email: string): Promise<void> {
-  return authFetch(`/api/projects/${projectId}/members`, {
+export async function addProjectMember(projectId: string, email: string): Promise<void> {
+  const res = await authFetch(`/api/projects/${projectId}/members`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
-  }).then((res) => {
-    if (!res.ok) return json(res).then(() => undefined);
   });
+  // json() wirft bei einer Fehlerantwort mit der Meldung des Servers - genau
+  // das wird hier gebraucht, der Rueckgabewert nicht.
+  if (!res.ok) await json(res);
+}
+
+export async function removeProjectMember(projectId: string, userId: string): Promise<void> {
+  const res = await authFetch(`/api/projects/${projectId}/members/${userId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) await json(res);
 }
 
 export function listPlans(projectId: string): Promise<Plan[]> {

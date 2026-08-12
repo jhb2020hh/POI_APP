@@ -25,6 +25,7 @@ import {
   listUsers,
   logout,
   makeProjectAvailableOffline,
+  removeProjectMember,
   planFileUrl,
   type PointFilters,
   type PointWithPlan,
@@ -436,8 +437,15 @@ function App() {
       setMemberStatus('')
       listProjectMembers(selectedProjectId).then(setMembers)
     } catch (err) {
-      setMemberStatus(`Fehler: ${err}`)
+      setMemberStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
     }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!selectedProjectId) return
+    await removeProjectMember(selectedProjectId, userId)
+    const aktuell = await listProjectMembers(selectedProjectId)
+    setMembers(aktuell)
   }
 
   // Gibt zurueck, ob es geklappt hat. Der Aufrufer muss das wissen: schliesst
@@ -907,6 +915,8 @@ function App() {
           onProjectUpdated={(updated) => setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))}
           onClose={() => setSettingsOpen(false)}
           canDelete={currentUser?.role === 'admin'}
+          canManageMembers={currentUser?.role === 'admin'}
+          onRemoveMember={handleRemoveMember}
           onDeleteProject={async () => {
             await deleteProject(selectedProjectId)
             setProjects((prev) => prev.filter((p) => p.id !== selectedProjectId))
