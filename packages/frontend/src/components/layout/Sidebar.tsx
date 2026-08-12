@@ -234,7 +234,7 @@ export function Sidebar({
               Wechseln
             </button>
           ) : (
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="sidebar-knopfgruppe">
               <button
                 type="button"
                 className="btn btn-ghost-inverse btn-sm"
@@ -270,7 +270,7 @@ export function Sidebar({
         ) : (
           <>
             {showCreateProject && (
-              <form onSubmit={handleCreateProject} style={{ padding: '4px 8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <form onSubmit={handleCreateProject} className="sidebar-form">
                 <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Projektname" autoFocus required />
                 <input
                   value={newNumber}
@@ -283,9 +283,7 @@ export function Sidebar({
                 <button type="submit" className="btn btn-primary btn-sm btn-block">
                   Anlegen
                 </button>
-                {createProjectStatus && (
-                  <span style={{ fontSize: 12, color: 'var(--sidebar-text-muted)' }}>{createProjectStatus}</span>
-                )}
+                {createProjectStatus && <span className="sidebar-hinweis">{createProjectStatus}</span>}
               </form>
             )}
 
@@ -314,7 +312,7 @@ export function Sidebar({
         <div className="sidebar-section">
           <div className="sidebar-section-header">
             <span className="sidebar-section-title">Pläne</span>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="sidebar-knopfgruppe">
               <button
                 type="button"
                 className="btn btn-ghost-inverse btn-sm"
@@ -338,7 +336,7 @@ export function Sidebar({
           </div>
 
           {showUploadPlan && (
-            <form onSubmit={handleUploadPlan} style={{ padding: '4px 8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <form onSubmit={handleUploadPlan} className="sidebar-form">
               <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Name des Plans" autoFocus />
               <input type="file" accept="application/pdf" onChange={(e) => setPlanFile(e.target.files?.[0] ?? null)} />
               <button type="submit" className="btn btn-primary btn-sm btn-block">
@@ -348,13 +346,11 @@ export function Sidebar({
                   bisher wie ein Fortschrittshinweis gelesen. */}
               {(planFormError || planUploadStatus) && (
                 <span
-                  style={{
-                    fontSize: 12,
-                    color:
-                      planFormError || planUploadStatus.startsWith('Fehler')
-                        ? 'var(--color-danger)'
-                        : 'var(--sidebar-text-muted)',
-                  }}
+                  className={`sidebar-hinweis ${
+                    planFormError || planUploadStatus.startsWith('Fehler')
+                      ? 'sidebar-hinweis-fehler'
+                      : ''
+                  }`}
                 >
                   {planFormError || planUploadStatus}
                 </span>
@@ -409,14 +405,13 @@ export function Sidebar({
           )}
 
           {exportMode && (
-            <div style={{ padding: '4px 8px 10px' }}>
-              <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            <div className="sidebar-bereich">
+              <div className="sidebar-vorlagen">
                 {EXPORT_VORLAGEN.map((vorlage) => (
                   <button
                     key={vorlage.wert}
                     type="button"
                     className={`btn btn-sm ${exportTemplate === vorlage.wert ? 'btn-primary' : 'btn-ghost-inverse'}`}
-                    style={{ flex: 1 }}
                     onClick={() => {
                       setExportTemplate(vorlage.wert)
                       setExportStatus('')
@@ -430,12 +425,12 @@ export function Sidebar({
               {/* Alle Ausgaben richten sich nach den Filtern der Werkzeugleiste.
                   Ohne diesen Hinweis waere nicht erkennbar, warum ein Export
                   weniger Tickets enthaelt als erwartet. */}
-              <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
+              <p className="sidebar-hinweis">
                 Es werden die Tickets ausgegeben, die durch die aktuell gesetzten Filter sichtbar sind.
               </p>
 
               {exportTemplate === 'plaene' && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--sidebar-text-muted)', marginBottom: 6, cursor: 'pointer' }}>
+                <label className="sidebar-kontrollkaestchen">
                   <input
                     type="checkbox"
                     checked={exportIncludeTickets}
@@ -445,12 +440,10 @@ export function Sidebar({
                 </label>
               )}
               {exportTemplate === 'abnahmeprotokoll' && (
-                <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
-                  Ort und Datum werden im nächsten Schritt abgefragt.
-                </p>
+                <p className="sidebar-hinweis">Ort und Datum werden im nächsten Schritt abgefragt.</p>
               )}
               {exportTemplate === 'csv' && (
-                <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', marginBottom: 6 }}>
+                <p className="sidebar-hinweis">
                   Umfasst alle Zeichnungen des Projekts — eine Auswahl im Baum ist dafür nicht nötig.
                 </p>
               )}
@@ -467,12 +460,9 @@ export function Sidebar({
               </button>
               {exportStatus && (
                 <span
-                  style={{
-                    fontSize: 12,
-                    color: exportStatus.startsWith('Fehler')
-                      ? 'var(--color-danger)'
-                      : 'var(--sidebar-text-muted)',
-                  }}
+                  className={`sidebar-hinweis ${
+                    exportStatus.startsWith('Fehler') ? 'sidebar-hinweis-fehler' : ''
+                  }`}
                 >
                   {exportStatus}
                 </span>
@@ -483,11 +473,11 @@ export function Sidebar({
       )}
 
       {selectedProjectId && (
-        <div className="sidebar-section" style={{ marginTop: 'auto' }}>
+        <div className="sidebar-section sidebar-section-unten">
           <button type="button" className="btn btn-ghost-inverse btn-sm btn-block" onClick={onOpenSettings}>
             ⚙ Projekt-Einstellungen
           </button>
-          <div style={{ height: 6 }} />
+          <div className="sidebar-abstand" />
           <button
             type="button"
             className="btn btn-ghost-inverse btn-sm btn-block"
@@ -496,9 +486,7 @@ export function Sidebar({
           >
             ⬇ Offline verfügbar machen
           </button>
-          {offlineStatus && (
-            <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', padding: '4px 8px' }}>{offlineStatus}</p>
-          )}
+          {offlineStatus && <p className="sidebar-hinweis sidebar-bereich">{offlineStatus}</p>}
         </div>
       )}
     </aside>

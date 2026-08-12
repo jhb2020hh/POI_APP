@@ -5,8 +5,14 @@
   --color-border: #e2e4e9;
   --color-border-strong: #d0d3da;
   --color-text: #1a1d23;
-  --color-text-muted: #6b7280;
-  --color-text-faint: #9aa0ab;
+  /* Beide Toene sind angehoben. Gemessen gegen --color-bg (#f4f5f7), weil die
+     Anwendung darauf steht:
+       vorher  muted 4,4:1   faint 2,6:1
+       jetzt   muted 5,5:1   faint 4,7:1
+     4,5:1 ist die Grenze, ab der Text als lesbar gilt. Der gedaempfte Ton trug
+     Ticketnummern und Faelligkeiten - also Zahlen, die man ablesen soll. */
+  --color-text-muted: #5d6470;
+  --color-text-faint: #676e7b;
 
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
@@ -25,7 +31,9 @@
   --sidebar-bg: #191c25;
   --sidebar-bg-raised: #20232e;
   --sidebar-text: #cbd0dc;
-  --sidebar-text-muted: #7d8394;
+  /* Auf dem dunklen Grund der Leiste lag der gedaempfte Ton bei 4,5:1 knapp
+     unter der Grenze; jetzt 5,4:1. */
+  --sidebar-text-muted: #8b91a2;
   --sidebar-border: #2a2e3d;
   --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
   --sidebar-active-bg: rgba(37, 99, 235, 0.35);
@@ -40,6 +48,25 @@
 
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
 
+  /* Schriftgroessen als Stufen statt als Zahlen im Stylesheet. Vorher standen
+     dort neun verschiedene Werte zwischen 10,5 und 16 px, teils ohne
+     erkennbaren Unterschied in der Bedeutung - eine Aenderung an der
+     Lesbarkeit haette jede einzeln anfassen muessen.
+
+     Die Grundgroesse ist von 14 auf 15 px gestiegen, die kleinste von 10,5 auf
+     12 px. Unter 12 px wird auf einem Baustellenrechner bei Tageslicht nicht
+     mehr zuverlaessig gelesen. */
+  --schrift-grund: 15px;
+  --schrift-klein: 13.5px;
+  --schrift-mini: 12.5px;
+  --schrift-winzig: 12px;
+  --schrift-gross: 16px;
+
+  /* Einheitliche Hoehen fuer Schaltflaechen. Am Touchgeraet greift zusaetzlich
+     --touch-ziel (siehe @media (pointer: coarse) in App.css). */
+  --knopf-hoehe: 34px;
+  --knopf-hoehe-klein: 30px;
+
   /* Ab hier gilt das mobile Layout. Der Wert steht auch in einigen
      @media-Abfragen - CSS kann Variablen dort nicht auswerten, deshalb bei
      einer Aenderung beide Stellen anfassen. */
@@ -48,7 +75,7 @@
   /* Mindestgroesse einer mit dem Finger bedienbaren Flaeche. */
   --touch-ziel: 44px;
 
-  font: 14px/1.5 var(--sans);
+  font: var(--schrift-grund) / 1.55 var(--sans);
   color: var(--color-text);
   background: var(--color-bg);
   font-synthesis: none;
@@ -100,6 +127,27 @@ p {
 
 button {
   font: inherit;
+}
+
+/*
+ * Sichtbarer Fokus - fehlte bisher vollstaendig.
+ *
+ * Wer mit der Tastatur bedient, sah nicht, wo er sich befindet. Browser
+ * bringen zwar einen Standardrahmen mit, aber er verschwindet auf farbigen
+ * Flaechen; deshalb ein eigener mit Abstand, der auf jedem Grund steht.
+ *
+ * :focus-visible statt :focus - sonst umrandet jeder Mausklick die
+ * angeklickte Schaltflaeche, was aussieht wie ein haengengebliebener Zustand.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Auf dem dunklen Grund der Seitenleiste ist das Blau zu kontrastarm. */
+.app-sidebar :focus-visible {
+  outline-color: #8ab4ff;
 }
 
 table {

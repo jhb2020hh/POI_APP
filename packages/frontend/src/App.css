@@ -27,7 +27,7 @@
 
 .app-topbar-brand {
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--schrift-grund);
   color: var(--color-text);
   white-space: nowrap;
 }
@@ -60,7 +60,7 @@
 .app-footer {
   flex-shrink: 0;
   padding: 4px 16px;
-  font-size: 11px;
+  font-size: var(--schrift-winzig);
   color: var(--color-text-faint);
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
@@ -115,7 +115,7 @@
 }
 
 .sidebar-section-title {
-  font-size: 11px;
+  font-size: var(--schrift-winzig);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -143,7 +143,7 @@
   background: none;
   border: none;
   text-align: left;
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
   line-height: 1.3;
 }
 
@@ -166,14 +166,14 @@
 }
 
 .sidebar-item-meta {
-  font-size: 11px;
+  font-size: var(--schrift-winzig);
   color: var(--sidebar-text-muted);
   flex-shrink: 0;
 }
 
 .sidebar-empty {
   padding: 8px;
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
   color: var(--sidebar-text-muted);
 }
 
@@ -186,6 +186,69 @@
   cursor: pointer;
 }
 
+/* Formulare und Bereiche innerhalb der Leiste. Diese Klassen ersetzen die
+   fruehere Sammlung fest eingetragener style={{...}}-Angaben im Baustein -
+   dort waren Groessen und Farben der Aenderung an der Darstellung entzogen. */
+
+.sidebar-form {
+  padding: 4px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-knopfgruppe {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-bereich {
+  padding: 4px 8px 10px;
+}
+
+/* Hinweiszeile auf dem dunklen Grund der Leiste - .hinweis waere dort zu
+   kontrastarm, weil es fuer helle Flaechen gedacht ist. */
+.sidebar-hinweis {
+  font-size: var(--schrift-mini);
+  line-height: 1.5;
+  color: var(--sidebar-text-muted);
+  margin: 0 0 6px;
+}
+
+.sidebar-hinweis-fehler {
+  color: #ff9d9d;
+}
+
+.sidebar-vorlagen {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.sidebar-vorlagen .btn {
+  flex: 1;
+}
+
+.sidebar-kontrollkaestchen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--schrift-mini);
+  color: var(--sidebar-text-muted);
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.sidebar-abstand {
+  height: 6px;
+}
+
+/* Schiebt den Bereich mit Einstellungen und Offline-Schaltflaeche an den
+   unteren Rand der Leiste. */
+.sidebar-section-unten {
+  margin-top: auto;
+}
+
 /* ---------- Buttons ---------- */
 
 .btn {
@@ -193,10 +256,14 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  /* Die Hoehe kommt aus der Variablen, nicht aus dem Innenabstand: sonst waren
+     zwei Schaltflaechen mit unterschiedlich langem Text auch unterschiedlich
+     hoch, sobald eine davon umbrach. */
+  min-height: var(--knopf-hoehe);
   padding: 7px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
   font-weight: 500;
   cursor: pointer;
   line-height: 1.2;
@@ -259,8 +326,9 @@
 }
 
 .btn-sm {
+  min-height: var(--knopf-hoehe-klein);
   padding: 4px 10px;
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
 }
 
 .btn-block {
@@ -276,7 +344,7 @@
 }
 
 .field-label {
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -302,7 +370,7 @@ select {
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
 }
 
 input[type='color'] {
@@ -327,7 +395,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
   color: var(--color-text);
 }
 
@@ -359,7 +427,7 @@ textarea {
   gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--schrift-winzig);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -430,7 +498,7 @@ textarea {
 }
 
 .empty-state-title {
-  font-size: 15px;
+  font-size: var(--schrift-grund);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -444,7 +512,7 @@ textarea {
 }
 
 .dashboard-heading {
-  font-size: 15px;
+  font-size: var(--schrift-grund);
   font-weight: 600;
   color: var(--color-text);
   margin: 0 0 16px;
@@ -479,13 +547,13 @@ textarea {
 }
 
 .dashboard-card-title {
-  font-size: 14.5px;
+  font-size: var(--schrift-grund);
   font-weight: 600;
   color: var(--color-text);
 }
 
 .dashboard-card-meta {
-  font-size: 12px;
+  font-size: var(--schrift-winzig);
   color: var(--color-text-muted);
 }
 
@@ -506,7 +574,7 @@ textarea {
 }
 
 .dashboard-kpi-value {
-  font-size: 16px;
+  font-size: var(--schrift-gross);
   font-weight: 700;
   color: var(--color-text);
 }
@@ -516,7 +584,7 @@ textarea {
 }
 
 .dashboard-kpi-label {
-  font-size: 10.5px;
+  font-size: var(--schrift-winzig);
   color: var(--color-text-muted);
   text-align: center;
   line-height: 1.2;
@@ -543,7 +611,7 @@ textarea {
 }
 
 .toolbar-title {
-  font-size: 15px;
+  font-size: var(--schrift-grund);
   font-weight: 600;
   margin-right: 8px;
 }
@@ -588,7 +656,7 @@ textarea {
 .plan-ticket-panel-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-border);
-  font-size: 13px;
+  font-size: var(--schrift-mini);
   font-weight: 600;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -621,8 +689,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--knopf-hoehe-klein);
+  height: var(--knopf-hoehe-klein);
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -641,13 +709,13 @@ textarea {
 
 .data-table {
   width: 100%;
-  font-size: 13px;
+  font-size: var(--schrift-mini);
 }
 
 .data-table th {
   text-align: left;
   padding: 7px 10px;
-  font-size: 11px;
+  font-size: var(--schrift-winzig);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-faint);
@@ -693,7 +761,7 @@ textarea {
 }
 
 .ticket-row-title {
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
   font-weight: 500;
   color: var(--color-text);
 }
@@ -738,7 +806,7 @@ textarea {
 }
 
 .drawer-title {
-  font-size: 15px;
+  font-size: var(--schrift-grund);
   font-weight: 600;
 }
 
@@ -805,7 +873,7 @@ textarea {
    Bausteine. */
 
 .hinweis {
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
   line-height: 1.5;
   color: var(--color-text-muted);
   margin: 0;
@@ -846,7 +914,7 @@ textarea {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  font-size: 14px;
+  font-size: var(--schrift-klein);
   cursor: pointer;
 }
 
@@ -858,7 +926,7 @@ textarea {
 }
 
 .einstellung-hinweis {
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
   color: var(--color-text-muted);
   line-height: 1.5;
 }
@@ -875,7 +943,7 @@ textarea {
 
 .tab {
   padding: 10px 0;
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
   font-weight: 500;
   color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
@@ -897,8 +965,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: var(--knopf-hoehe-klein);
+  height: var(--knopf-hoehe-klein);
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
@@ -920,7 +988,7 @@ textarea {
   border-radius: 999px;
   background: var(--color-primary-bg);
   color: var(--color-primary);
-  font-size: 10.5px;
+  font-size: var(--schrift-winzig);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -929,7 +997,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--schrift-mini);
   color: var(--color-text-muted);
 }
 
@@ -964,7 +1032,7 @@ textarea {
   align-items: center;
   gap: 10px;
   max-width: 560px;
-  font-size: 13.5px;
+  font-size: var(--schrift-klein);
 }
 
 .divider {
@@ -1041,15 +1109,18 @@ textarea {
     height: var(--touch-ziel);
   }
 
+  /* Am Touchgeraet zaehlt die Flaeche, nicht die Optik: beide Groessen gehen
+     auf das Mindestmasz hoch. */
+  .btn,
   .btn-sm {
-    min-height: 38px;
+    min-height: var(--touch-ziel);
   }
 
   input,
   select,
   textarea {
     /* Unter 16 px zoomt iOS beim Hineintippen automatisch in die Seite. */
-    font-size: 16px;
+    font-size: var(--schrift-gross);
     min-height: 40px;
   }
 }
@@ -1083,7 +1154,7 @@ textarea {
   }
 
   .app-topbar-brand {
-    font-size: 14px;
+    font-size: var(--schrift-klein);
   }
 
   /* ---------- Sidebar als ausfahrbare Leiste ---------- */
@@ -1252,7 +1323,7 @@ textarea {
   .data-table td::before {
     content: attr(data-label);
     flex: 0 0 92px;
-    font-size: 11.5px;
+    font-size: var(--schrift-winzig);
     text-transform: uppercase;
     letter-spacing: 0.03em;
     color: var(--color-text-faint);
@@ -1261,7 +1332,7 @@ textarea {
   /* Der Titel steht als Ueberschrift der Karte ohne Beschriftung davor. */
   .data-table td[data-label='Titel'] {
     font-weight: 600;
-    font-size: 15px;
+    font-size: var(--schrift-grund);
     padding-bottom: 6px;
   }
 
