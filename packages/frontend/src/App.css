@@ -544,14 +544,18 @@ textarea {
 
 /* ---------- Plan workspace ---------- */
 
+/* Bezugsrahmen der Zoomleiste. Bewusst hier und nicht auf .plan-canvas-area:
+   ein absolut gesetztes Element in einem scrollenden Kasten scrollt mit dessen
+   Inhalt mit - die Leiste wanderte beim Schwenken ueber den Plan davon. Liegt
+   der Bezugsrahmen ausserhalb des Scrollbehaelters, bleibt sie stehen. */
 .plan-workspace {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
 .plan-canvas-area {
-  position: relative;
   flex: 1;
   min-width: 0;
   overflow: auto;
@@ -1162,15 +1166,15 @@ textarea {
 }
 
 /* ---------- Zoom-Leiste des Plan-Viewers ---------- */
-/* Am Rechner oben rechts ueber der Zeichnung. Sie liegt in einem scrollenden
-   Kasten, wandert also beim Schwenken mit - das ist dort gewollt, weil der
-   Plan meist ganz sichtbar ist. */
+/* Am Rechner fest oben links ueber der Zeichnung. Der Bezugsrahmen ist
+   .plan-workspace, nicht der scrollende Kasten darunter - sonst wandert die
+   Leiste beim Schwenken mit dem Plan davon. */
 
 .pdf-zoom-toolbar {
   position: absolute;
   top: 8px;
-  right: 8px;
-  z-index: 1;
+  left: 8px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1182,13 +1186,12 @@ textarea {
 }
 
 @media (max-width: 768px) {
-  /* Auf schmalen Bildschirmen verdeckte sie oben rechts einen Grossteil der
-     sichtbaren Zeichnung und scrollte beim Schwenken aus dem Bild. Fest am
-     unteren Rand bleibt sie erreichbar und stoert die Sicht nicht. */
+  /* Auf schmalen Bildschirmen verdeckte sie oben einen Grossteil der sichtbaren
+     Zeichnung - genau dort, wo man den Plan ablesen will. Fest am unteren Rand
+     bleibt sie mit dem Daumen erreichbar und stoert die Sicht nicht. */
   .pdf-zoom-toolbar {
     position: fixed;
     top: auto;
-    right: auto;
     left: 50%;
     bottom: calc(10px + env(safe-area-inset-bottom));
     transform: translateX(-50%);
