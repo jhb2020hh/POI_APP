@@ -11,10 +11,31 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const FALLBACK_COLOR = '#888888'
 const FALLBACK_GLYPH = '!'
+/** Startwert, bis der Einpassmaszstab feststeht. */
 const DEFAULT_SCALE = 1.5
-const MIN_SCALE = 0.75
+
+/**
+ * Absoluter Boden - greift nur, wenn sich der Einpassmaszstab nicht ermitteln
+ * laesst (Zeichenflaeche noch ohne Masze). Die eigentliche Untergrenze ist der
+ * Maszstab, bei dem die ganze Seite sichtbar ist; kleiner braucht es nie.
+ *
+ * Vorher stand hier eine feste Untergrenze von 0,75. Die zog *jeden* Wert hoch,
+ * auch das Einpassen: ein A3-Plan (rund 1190 pt breit) braucht auf einem
+ * 360-px-Bildschirm etwa 0,28 und wurde damit fast dreimal zu grosz gezeichnet -
+ * ringsum abgeschnitten. Und weil die Anzeige gegen DEFAULT_SCALE rechnete, war
+ * bei 0,75 genau bei den gemeldeten 50 % Schluss. Ein Fehler, zwei Symptome.
+ */
+const MIN_SCALE_ABSOLUT = 0.05
 const MAX_SCALE = 4.5
-const SCALE_STEP = 0.375
+
+/**
+ * Zoomschritte sind multiplikativ, nicht additiv. Ein fester Summand von 0,375
+ * waere bei Einpassmaszstab 0,28 mehr als eine Verdopplung - der erste Schritt
+ * haette den halben Plan aus dem Bild geschoben.
+ */
+const ZOOM_FAKTOR = 1.25
+/** Feiner, weil ein Mausradtick viel oefter kommt als ein Tastendruck. */
+const RAD_FAKTOR = 1.08
 
 // plan und users wurden nur fuer den hier entfernten Export gebraucht.
 interface PdfViewerProps {
@@ -46,6 +67,16 @@ export function PdfViewer({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
   const [scale, setScale] = useState(DEFAULT_SCALE)
   const [retryCount, setRetryCount] = useState(0)
+  /**
+   * Maszstab, bei dem die ganze Seite in die Zeichenflaeche passt - zugleich
+   * Untergrenze und Bezugsgroesze der Prozentanzeige (100 % = alles sichtbar).
+   *
+   * Doppelt gefuehrt: der State loest das Neuzeichnen der Leiste aus, der Ref
+   * wird in den Zeigerhandlern und im Begrenzer gelesen, die sonst mit einem
+   * veralteten Wert aus ihrer Closure rechnen wuerden.
+   */
+  const [einpassMassstab, setEinpassMassstab] = useState<number | null>(null)
+  const einpassRef = useRef<number | null>(null)
 
   const renderAtScale = useCallback(async (targetScale: number) => {
     const pdf = pdfDocRef.current
@@ -75,12 +106,28 @@ export function PdfViewer({
     }
   }, [])
 
-  function begrenzeMassstab(wert: number): number {
-    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(wert * 1000) / 1000))
+  /** Kleinster zugelassener Maszstab: die eingepasste Seite. */
+  function untergrenze(): number {
+    return Math.max(MIN_SCALE_ABSOLUT, einpassRef.current ?? MIN_SCALE_ABSOLUT)
   }
 
-  function zoomBy(delta: number) {
-    setScale((s) => begrenzeMassstab(s + delta))
+  /**
+   * Groeszter zugelassener Maszstab.
+   *
+   * Nicht stur MAX_SCALE: passt eine kleine Seite in einem groszen Fenster erst
+   * bei Maszstab 5 ein, waere die Obergrenze sonst kleiner als die Untergrenze
+   * und man koennte gar nichts mehr einstellen.
+   */
+  function obergrenze(): number {
+    return Math.max(MAX_SCALE, untergrenze())
+  }
+
+  function begrenzeMassstab(wert: number): number {
+    return Math.min(obergrenze(), Math.max(untergrenze(), Math.round(wert * 1000) / 1000))
+  }
+
+  function zoomUm(faktor: number) {
+    setScale((s) => begrenzeMassstab(s * faktor))
   }
 
   /** Der scrollende Kasten um die Zeichnung - er traegt das Schwenken. */
@@ -89,30 +136,47 @@ export function PdfViewer({
   }
 
   /**
-   * Passt den Plan beim Oeffnen in die Breite ein.
+   * Ermittelt den Maszstab, bei dem die *ganze* Seite in die Zeichenflaeche
+   * passt, und merkt ihn als Untergrenze und Bezugsgroesze vor.
    *
-   * Die Zeichenflaeche wurde bisher starr aus der PDF-Groesse berechnet: ein
-   * A3-Plan ergibt bei Maszstab 1,5 rund 1750 px Breite. Auf einem Smartphone
-   * sah man davon einen Ausschnitt von etwa einem Fuenftel, ohne Anhaltspunkt,
-   * wo man sich befindet.
+   * Frueher wurde nur die Breite betrachtet. Bei einem Hochformat-Plan blieb
+   * damit unten trotzdem etwas abgeschnitten - massgeblich ist der kleinere der
+   * beiden Faktoren. Ist die Hoehe noch nicht bekannt (Zeichenflaeche gerade
+   * erst im Aufbau), zaehlt ersatzweise die Breite allein.
    */
-  const passeInBreiteEin = useCallback(async () => {
+  const berechneEinpassMassstab = useCallback(async (): Promise<number | null> => {
     const pdf = pdfDocRef.current
     const flaeche = scrollflaeche()
-    if (!pdf || !flaeche) return
+    if (!pdf || !flaeche) return null
 
     const seite = await pdf.getPage(1)
-    const grundbreite = seite.getViewport({ scale: 1 }).width
+    const grund = seite.getViewport({ scale: 1 })
     // 24 px Luft, damit der Plan nicht bündig am Rand klebt.
-    const verfuegbar = flaeche.clientWidth - 24
-    if (verfuegbar <= 0 || grundbreite <= 0) return
+    const breite = flaeche.clientWidth - 24
+    const hoehe = flaeche.clientHeight - 24
+    if (breite <= 0 || grund.width <= 0 || grund.height <= 0) return null
 
-    setScale(begrenzeMassstab(verfuegbar / grundbreite))
+    const nachBreite = breite / grund.width
+    const faktor = hoehe > 0 ? Math.min(nachBreite, hoehe / grund.height) : nachBreite
+    const gerundet = Math.max(MIN_SCALE_ABSOLUT, Math.round(faktor * 1000) / 1000)
+
+    einpassRef.current = gerundet
+    setEinpassMassstab(gerundet)
+    return gerundet
   }, [])
+
+  /** Zurueck auf "ganze Seite sichtbar". */
+  const passeSeiteEin = useCallback(async () => {
+    const ziel = await berechneEinpassMassstab()
+    if (ziel === null) return
+    setScale(ziel)
+  }, [berechneEinpassMassstab])
 
   useEffect(() => {
     let cancelled = false
     setScale(DEFAULT_SCALE)
+    setEinpassMassstab(null)
+    einpassRef.current = null
     setError(null)
 
     async function load() {
@@ -125,11 +189,16 @@ export function PdfViewer({
         const pdf = await loadingTask.promise
         if (cancelled) return
         pdfDocRef.current = pdf
-        await renderAtScale(DEFAULT_SCALE)
+
+        // Erst den Einpassmaszstab bestimmen, dann *einmal* zeichnen. Vorher
+        // wurde zuerst in DEFAULT_SCALE gerendert und gleich darauf noch einmal
+        // in der Einpassgroesze - sichtbar als Sprung und eine vergebene
+        // pdf.js-Rendierung.
+        const ziel = (await berechneEinpassMassstab()) ?? DEFAULT_SCALE
         if (cancelled) return
-        // Erst nach dem ersten Rendern: vorher steht die Breite der
-        // Zeichenflaeche noch nicht fest.
-        await passeInBreiteEin()
+        await renderAtScale(ziel)
+        if (cancelled) return
+        setScale(ziel)
       } catch (err) {
         if (!cancelled) setError(String(err))
       }
@@ -140,7 +209,7 @@ export function PdfViewer({
       cancelled = true
       pdfDocRef.current = null
     }
-  }, [fileUrl, renderAtScale, passeInBreiteEin, retryCount])
+  }, [fileUrl, renderAtScale, berechneEinpassMassstab, retryCount])
 
   useEffect(() => {
     // Verglichen wird mit dem tatsaechlich gezeichneten Maszstab. Die fruehere
@@ -169,7 +238,7 @@ export function PdfViewer({
     function handleWheel(e: WheelEvent) {
       if (!e.ctrlKey) return
       e.preventDefault()
-      zoomBy(e.deltaY > 0 ? -SCALE_STEP / 3 : SCALE_STEP / 3)
+      zoomUm(e.deltaY > 0 ? 1 / RAD_FAKTOR : RAD_FAKTOR)
     }
     el.addEventListener('wheel', handleWheel, { passive: false })
     return () => el.removeEventListener('wheel', handleWheel)
@@ -367,32 +436,35 @@ export function PdfViewer({
         <button
           type="button"
           className="icon-btn"
-          onClick={() => zoomBy(-SCALE_STEP)}
-          disabled={scale <= MIN_SCALE}
+          onClick={() => zoomUm(1 / ZOOM_FAKTOR)}
+          disabled={scale <= untergrenze()}
           title="Verkleinern"
         >
           −
         </button>
+        {/* Bezugsgroesze ist die eingepasste Seite: 100 % heiszt "alles
+            sichtbar". Gegen DEFAULT_SCALE zu rechnen ergab je nach Planformat
+            voellig verschiedene Zahlen fuer denselben Anblick. */}
         <span style={{ fontSize: 12, minWidth: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>
-          {Math.round((scale / DEFAULT_SCALE) * 100)}%
+          {Math.round((scale / (einpassMassstab ?? DEFAULT_SCALE)) * 100)}%
         </span>
         <button
           type="button"
           className="icon-btn"
-          onClick={() => zoomBy(SCALE_STEP)}
-          disabled={scale >= MAX_SCALE}
+          onClick={() => zoomUm(ZOOM_FAKTOR)}
+          disabled={scale >= obergrenze()}
           title="Vergrößern"
         >
           +
         </button>
-        {/* Zuruecksetzen heisst jetzt "auf Breite einpassen" - das ist der
-            Zustand, in dem der Plan geoeffnet wird, und auf schmalen
-            Bildschirmen der einzige, in dem man ihn ganz sieht. */}
+        {/* Zuruecksetzen heisst "ganze Seite einpassen" - der Zustand, in dem
+            der Plan geoeffnet wird, und auf schmalen Bildschirmen der einzige,
+            in dem man ihn vollstaendig sieht. */}
         <button
           type="button"
           className="icon-btn"
-          onClick={() => void passeInBreiteEin()}
-          title="Auf Breite einpassen"
+          onClick={() => void passeSeiteEin()}
+          title="Ganze Seite einpassen"
         >
           ⟲
         </button>
