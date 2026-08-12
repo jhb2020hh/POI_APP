@@ -8,8 +8,9 @@ interface TopBarProps {
   onOpenAdminMenu: () => void
   /** Erinnerungsmails ein- oder ausschalten - steht jedem Konto offen. */
   onOpenBenachrichtigungen: () => void
-  /** Blendet die Seitenleiste ein/aus - nur auf schmalen Bildschirmen sichtbar. */
+  /** Blendet die Navigationsleiste ein oder aus - auf jeder Bildschirmgroesse. */
   onToggleSidebar: () => void
+  navigationSichtbar: boolean
 }
 
 export function TopBar({
@@ -22,15 +23,20 @@ export function TopBar({
   onOpenAdminMenu,
   onOpenBenachrichtigungen,
   onToggleSidebar,
+  navigationSichtbar,
 }: TopBarProps) {
   return (
     <header className="app-topbar">
       <div className="app-topbar-left">
+        {/* Frueher nur am Smartphone sichtbar. Am Rechner gibt es jetzt
+            dieselbe Schaltflaeche, damit der Grundriss mehr Platz bekommt. */}
         <button
           type="button"
-          className="icon-btn nur-mobil"
+          className="icon-btn"
           onClick={onToggleSidebar}
-          aria-label="Navigation ein-/ausblenden"
+          aria-label={navigationSichtbar ? 'Navigation ausblenden' : 'Navigation einblenden'}
+          aria-expanded={navigationSichtbar}
+          title={navigationSichtbar ? 'Navigation ausblenden' : 'Navigation einblenden'}
         >
           ☰
         </button>

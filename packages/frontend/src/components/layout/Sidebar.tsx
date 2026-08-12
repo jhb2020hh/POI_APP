@@ -14,8 +14,12 @@ const EXPORT_VORLAGEN: { wert: ExportTemplate; beschriftung: string }[] = [
 ]
 
 interface SidebarProps {
-  /** Nur auf schmalen Bildschirmen wirksam: Leiste ausgefahren. */
-  istOffen: boolean
+  /**
+   * Am Rechner ausgeklappt, am Smartphone eingeblendet - derselbe Begriff fuer
+   * beide Bildschirmgroessen. Die Leiste selbst muss den Unterschied nicht
+   * kennen, das erledigt das Stylesheet.
+   */
+  istSichtbar: boolean
   /** Nach einer Auswahl schliesst sich die Leiste auf schmalen Bildschirmen. */
   onNavigiert: () => void
 
@@ -56,7 +60,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  istOffen,
+  istSichtbar,
   onNavigiert,
   projects,
   selectedProjectId,
@@ -214,7 +218,10 @@ export function Sidebar({
   }
 
   return (
-    <aside className={`app-sidebar ${istOffen ? 'ist-offen' : ''}`}>
+    // inert statt aria-hidden: die eingeklappte Leiste hat zwar keine Breite,
+    // ihre Schaltflaechen blieben aber mit der Tabulatortaste erreichbar - man
+    // haette in etwas hineingetabbt, das man nicht sieht.
+    <aside className={`app-sidebar ${istSichtbar ? '' : 'ist-verborgen'}`} inert={!istSichtbar}>
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="sidebar-section-title">Projekte</span>

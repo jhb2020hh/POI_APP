@@ -75,6 +75,16 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  transition: width 0.18s ease;
+}
+
+/* Eingeklappt heisst Breite null, nicht display:none - so bleibt der Uebergang
+   sichtbar und der Inhalt behaelt seinen Zustand (aufgeklappte Ordner, Auswahl
+   im Exportbereich). */
+.app-sidebar.ist-verborgen {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .app-main {
@@ -572,6 +582,7 @@ textarea {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  transition: width 0.18s ease;
 }
 
 .plan-ticket-panel-header {
@@ -582,6 +593,48 @@ textarea {
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Einklappen nur am Rechner. Am Smartphone wird zwischen Plan und Ticketliste
+   umgeschaltet (.zeigt-plan / .zeigt-tickets) - eine zusaetzlich eingeklappte
+   Leiste liesse die Ticketansicht dort leer zurueck. */
+@media (min-width: 769px) {
+  .plan-ticket-panel.ist-verborgen {
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-left: none;
+  }
+}
+
+/* Griff zum Wiederoeffnen der eingeklappten Ticketliste. Er sitzt im
+   Arbeitsbereich, weil die Leiste selbst gerade keine Breite hat. */
+.leisten-griff {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.leisten-griff:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 /* ---------- Data table (ticket list) ---------- */
@@ -940,6 +993,13 @@ textarea {
   display: none;
 }
 
+/* Gegenstueck zu .nur-mobil: Bedienelemente, die es nur am Rechner gibt -
+   das Einklappen der Ticketliste etwa, das am Smartphone der
+   Ansichtsumschalter erledigt. */
+.nur-rechner {
+  display: inline-flex;
+}
+
 .ansicht-umschalter {
   gap: 4px;
 }
@@ -999,6 +1059,10 @@ textarea {
     display: inline-flex;
   }
 
+  .nur-rechner {
+    display: none;
+  }
+
   /* ---------- Kopfleiste ---------- */
   /* Die rechte Gruppe war unschrumpfbar und wurde jenseits des Bildschirmrands
      abgeschnitten. Jetzt darf sie umbrechen, die Leiste waechst mit. */
@@ -1026,6 +1090,9 @@ textarea {
   /* Statt fest im Fluss zu liegen, schiebt sie sich ueber den Inhalt und ist
      ueber die Schaltflaeche in der Kopfleiste erreichbar. */
 
+  /* Am Smartphone liegt die Leiste ueber dem Inhalt statt daneben. Die Breite
+     wird hier zurueckgesetzt: am Rechner bedeutet "verborgen" Breite null, hier
+     dagegen volle Breite, aber aus dem Bild geschoben. */
   .app-sidebar {
     position: fixed;
     top: 0;
@@ -1033,14 +1100,14 @@ textarea {
     left: 0;
     z-index: 45;
     width: min(300px, 86vw);
-    transform: translateX(-100%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow-lg);
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  .app-sidebar.ist-offen {
-    transform: none;
+  .app-sidebar.ist-verborgen {
+    width: min(300px, 86vw);
+    transform: translateX(-100%);
   }
 
   .sidebar-backdrop {

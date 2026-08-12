@@ -51,6 +51,7 @@ import { TopBar } from './components/layout/TopBar'
 import { Sidebar } from './components/layout/Sidebar'
 import { AdminMenu } from './components/AdminMenu'
 import { BenachrichtigungenDialog } from './components/BenachrichtigungenDialog'
+import { istSchmalerBildschirm, useLeistenSichtbarkeit } from './hooks/useLeistenSichtbarkeit'
 import { STATUS_LABELS } from './constants'
 import { genId } from './utils/id'
 import { exportPlansToPdf } from './utils/planExportPdf'
@@ -107,7 +108,10 @@ function App() {
 
   // Zustand des mobilen Layouts. Am Rechner ohne Wirkung: die zugehoerigen
   // CSS-Regeln greifen erst unterhalb des Umbruchpunkts.
-  const [sidebarOffen, setSidebarOffen] = useState(false)
+  // Ein Begriff für beide Bildschirmgrößen: sichtbar heißt am Rechner
+  // ausgeklappt, am Smartphone eingeblendet.
+  const [navigationSichtbar, setNavigationSichtbar] = useLeistenSichtbarkeit('poi.leiste.navigation')
+  const [ticketleisteSichtbar, setTicketleisteSichtbar] = useLeistenSichtbarkeit('poi.leiste.tickets')
   const [filterOffen, setFilterOffen] = useState(false)
   // Plan und Ticketliste haben nebeneinander keinen Platz - es wird umgeschaltet.
   const [mobilAnsicht, setMobilAnsicht] = useState<'plan' | 'tickets'>('plan')
@@ -614,23 +618,28 @@ function App() {
         canAccessAdminMenu={canAccessAdminMenu}
         onOpenAdminMenu={() => setAdminMenuOpen(true)}
         onOpenBenachrichtigungen={() => setBenachrichtigungenOffen(true)}
-        onToggleSidebar={() => setSidebarOffen((v) => !v)}
+        navigationSichtbar={navigationSichtbar}
+        onToggleSidebar={() => setNavigationSichtbar((v) => !v)}
       />
 
       <div className="app-body">
         {/* Fangflaeche, um die ausgefahrene Leiste wieder zu schliessen. Nur
             unterhalb des Umbruchpunkts sichtbar (siehe .sidebar-backdrop). */}
-        {sidebarOffen && (
+        {navigationSichtbar && (
           <button
             type="button"
             className="sidebar-backdrop nur-mobil"
             aria-label="Navigation schließen"
-            onClick={() => setSidebarOffen(false)}
+            onClick={() => setNavigationSichtbar(false)}
           />
         )}
         <Sidebar
-          istOffen={sidebarOffen}
-          onNavigiert={() => setSidebarOffen(false)}
+          istSichtbar={navigationSichtbar}
+          onNavigiert={() => {
+            // Nur am Smartphone im Weg: dort liegt die Leiste ueber dem Inhalt,
+            // den man gerade aufgerufen hat. Am Rechner bleibt sie stehen.
+            if (istSchmalerBildschirm()) setNavigationSichtbar(false)
+          }}
           projects={projects}
           selectedProjectId={selectedProjectId}
           onSelectProject={setSelectedProjectId}
@@ -875,10 +884,34 @@ function App() {
                     onPointClick={handlePointClick}
                   />
                 </div>
-                <div className="plan-ticket-panel">
-                  <div className="plan-ticket-panel-header">Tickets ({points.length})</div>
+                <div className={`plan-ticket-panel ${ticketleisteSichtbar ? '' : 'ist-verborgen'}`}>
+                  <div className="plan-ticket-panel-header">
+                    <span>Tickets ({points.length})</span>
+                    <button
+                      type="button"
+                      className="icon-btn nur-rechner"
+                      onClick={() => setTicketleisteSichtbar(false)}
+                      title="Ticketliste ausblenden"
+                      aria-label="Ticketliste ausblenden"
+                    >
+                      ›
+                    </button>
+                  </div>
                   <TicketList points={points} categories={categories} users={users} onSelect={handlePointClick} />
                 </div>
+                {/* Griff zum Wiederöffnen. Er sitzt im Arbeitsbereich, nicht in
+                    der Leiste — die ist ja gerade auf Breite null. */}
+                {!ticketleisteSichtbar && (
+                  <button
+                    type="button"
+                    className="leisten-griff nur-rechner"
+                    onClick={() => setTicketleisteSichtbar(true)}
+                    title="Ticketliste einblenden"
+                    aria-label="Ticketliste einblenden"
+                  >
+                    ‹
+                  </button>
+                )}
               </div>
             </>
           )}

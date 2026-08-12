@@ -172,6 +172,44 @@ export function PdfViewer({
     setScale(ziel)
   }, [berechneEinpassMassstab])
 
+  /**
+   * Haelt den Einpassmaszstab nach, wenn sich die Zeichenflaeche aendert.
+   *
+   * Noetig, seit sich die Seitenleisten einklappen lassen: der Einpassmaszstab
+   * ist zugleich die Untergrenze des Zooms. Ohne Nachrechnen bliebe nach dem
+   * Einklappen die alte, zu kleine Untergrenze stehen, und die Prozentanzeige
+   * behauptete "100 %" fuer eine Seite, die den Platz gar nicht mehr ausfuellt.
+   *
+   * Wer die ganze Seite sieht, sieht sie danach weiter; wer hineingezoomt hat,
+   * behaelt seine Vergroesserung - nur die Grenzen wandern mit.
+   */
+  useEffect(() => {
+    const flaeche = scrollflaeche()
+    if (!flaeche || typeof ResizeObserver === 'undefined') return
+
+    let zeitgeber: number | null = null
+    const beobachter = new ResizeObserver(() => {
+      // Entprellt, weil das Ein- und Ausklappen als Uebergang laeuft und dabei
+      // fortlaufend neue Breiten meldet.
+      if (zeitgeber) window.clearTimeout(zeitgeber)
+      zeitgeber = window.setTimeout(async () => {
+        const vorher = einpassRef.current
+        const neu = await berechneEinpassMassstab()
+        if (neu === null) return
+        setScale((s) =>
+          vorher !== null && Math.abs(s - vorher) < 0.001 ? neu : begrenzeMassstab(s)
+        )
+      }, 150)
+    })
+
+    beobachter.observe(flaeche)
+    return () => {
+      if (zeitgeber) window.clearTimeout(zeitgeber)
+      beobachter.disconnect()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [berechneEinpassMassstab])
+
   useEffect(() => {
     let cancelled = false
     setScale(DEFAULT_SCALE)
