@@ -107,9 +107,9 @@ export function ProjectSettingsPanel({
             {canDelete && (
               <>
                 {deleteStatus && (
-                  <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{deleteStatus}</span>
+                  <span className="hinweis">{deleteStatus}</span>
                 )}
-                <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={handleDelete}>
+                <button type="button" className="btn btn-ghost btn-ghost-gefahr btn-sm" onClick={handleDelete}>
                   Projekt löschen
                 </button>
               </>
@@ -246,8 +246,7 @@ export function ProjectSettingsPanel({
                           {canManageMembers && (
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
-                              style={{ color: 'var(--color-danger)' }}
+                              className="btn btn-ghost btn-ghost-gefahr btn-sm"
                               onClick={() => handleRemoveMember(m.user_id, user?.display_name)}
                             >
                               Entfernen
@@ -278,7 +277,7 @@ export function ProjectSettingsPanel({
                 <button type="submit" className="btn btn-primary btn-sm">
                   Speichern
                 </button>
-                {datesStatus && <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{datesStatus}</span>}
+                {datesStatus && <span className="hinweis">{datesStatus}</span>}
               </div>
             </form>
           )}

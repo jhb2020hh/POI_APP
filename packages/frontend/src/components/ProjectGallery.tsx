@@ -110,10 +110,10 @@ export function ProjectGallery({ projectId, categories, plans, onSelectAttachmen
           )
         )}
         {filteredAttachments.length === 0 && attachments.length > 0 && (
-          <span style={{ fontSize: 12.5, color: 'var(--color-text-faint)' }}>Keine Fotos/Anlagen für diesen Filter</span>
+          <span className="meta">Keine Fotos/Anlagen für diesen Filter</span>
         )}
         {attachments.length === 0 && (
-          <span style={{ fontSize: 12.5, color: 'var(--color-text-faint)' }}>Noch keine Fotos/Anlagen im Projekt</span>
+          <span className="meta">Noch keine Fotos/Anlagen im Projekt</span>
         )}
       </div>
     </div>

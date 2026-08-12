@@ -78,7 +78,7 @@ export function PointTimeline({ pointId, users }: PointTimelineProps) {
       >
         {items.map((item) =>
           item.kind === 'history' ? (
-            <li key={`h-${item.entry.id}`} style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+            <li key={`h-${item.entry.id}`} className="hinweis">
               <em>
                 {FIELD_LABELS[item.entry.field_changed] ?? item.entry.field_changed} geändert von „
                 {item.entry.old_value ?? '–'}" zu „{item.entry.new_value ?? '–'}"
@@ -96,7 +96,7 @@ export function PointTimeline({ pointId, users }: PointTimelineProps) {
               }}
             >
               <strong>{userName(item.entry.author_id)}</strong>{' '}
-              <span style={{ fontSize: 12, color: 'var(--color-text-faint)' }}>
+              <span className="meta">
                 {new Date(item.entry.created_at).toLocaleString('de-DE')}
               </span>
               <div>{item.entry.body}</div>
@@ -104,7 +104,7 @@ export function PointTimeline({ pointId, users }: PointTimelineProps) {
           )
         )}
         {items.length === 0 && (
-          <li style={{ fontSize: 13, color: 'var(--color-text-faint)' }}>Noch keine Einträge</li>
+          <li className="meta">Noch keine Einträge</li>
         )}
       </ul>
       <div className="field-row">
@@ -124,7 +124,7 @@ export function PointTimeline({ pointId, users }: PointTimelineProps) {
           Kommentieren
         </button>
       </div>
-      {status && <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>{status}</p>}
+      {status && <p className="hinweis" style={{ marginTop: 6 }}>{status}</p>}
     </div>
   )
 }

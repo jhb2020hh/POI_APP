@@ -69,7 +69,7 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
         />
       </div>
       {!isOnline && (
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+        <p className="hinweis" style={{ marginTop: 6 }}>
           Offline: Anlagen können erst online hochgeladen werden.
         </p>
       )}
@@ -112,7 +112,7 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
           )
         )}
         {attachments.length === 0 && (
-          <span style={{ fontSize: 12.5, color: 'var(--color-text-faint)' }}>Noch keine Anlagen</span>
+          <span className="meta">Noch keine Anlagen</span>
         )}
       </div>
     </div>

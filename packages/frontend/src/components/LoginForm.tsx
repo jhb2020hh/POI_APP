@@ -68,7 +68,7 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ fontSize: 28, marginBottom: 6 }}>🏗️</div>
           <h1 style={{ fontSize: 18 }}>POI-App</h1>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          <p className="hinweis" style={{ marginTop: 4 }}>
             Baustellen-Mängel &amp; Ticket-Tracking
           </p>
         </div>
@@ -140,15 +140,15 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
         </form>
 
         {istRegistrierung && !hinweis && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 12 }}>
+          <p className="hinweis" style={{ marginTop: 12 }}>
             Neue Zugänge werden von einem Administrator geprüft und freigeschaltet.
           </p>
         )}
         {hinweis && (
-          <p style={{ color: 'var(--color-success)', fontSize: 13, marginTop: 12 }}>{hinweis}</p>
+          <p className="hinweis hinweis-erfolg" style={{ marginTop: 12 }}>{hinweis}</p>
         )}
         {error && (
-          <p style={{ color: 'var(--color-danger)', fontSize: 13, marginTop: 12, textAlign: 'center' }}>{error}</p>
+          <p className="hinweis hinweis-fehler" style={{ marginTop: 12, textAlign: 'center' }}>{error}</p>
         )}
       </div>
     </div>

@@ -63,7 +63,7 @@ export function BenachrichtigungenDialog({
             </span>
           </label>
           {fehler && (
-            <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>{fehler}</p>
+            <p className="hinweis hinweis-fehler" style={{ margin: 0 }}>{fehler}</p>
           )}
         </div>
       </div>

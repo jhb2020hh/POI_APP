@@ -36,7 +36,7 @@ export function AbnahmeprotokollDialog({ ticketCount, onConfirm, onClose }: Abna
           </button>
         </div>
         <form onSubmit={handleSubmit} className="modal-body">
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+          <p className="hinweis" style={{ marginBottom: 12 }}>
             {ticketCount} ausgewählte Ticket{ticketCount === 1 ? '' : 's'} werden in den Bericht aufgenommen.
           </p>
           <div className="field" style={{ marginBottom: 10 }}>
@@ -51,7 +51,7 @@ export function AbnahmeprotokollDialog({ ticketCount, onConfirm, onClose }: Abna
             <button type="submit" className="btn btn-primary btn-sm">
               PDF erzeugen
             </button>
-            {status && <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{status}</span>}
+            {status && <span className="hinweis">{status}</span>}
           </div>
         </form>
       </div>

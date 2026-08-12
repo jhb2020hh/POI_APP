@@ -42,7 +42,7 @@ function Panel({
   return (
     <div className="card" style={{ padding: 14, flex: '1 1 260px', minWidth: 260 }}>
       <h4 style={{ marginBottom: 10 }}>{title}</h4>
-      {rows.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Keine Tickets</p>}
+      {rows.length === 0 && <p className="hinweis">Keine Tickets</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rows.map((row) => (
           <button
@@ -61,7 +61,7 @@ function Panel({
             }}
             title={row.key === '__none__' ? undefined : `Nach "${row.label}" filtern`}
           >
-            <span style={{ width: 110, fontSize: 12.5, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span className="meta" style={{ width: 110, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.label}
             </span>
             <span style={{ flex: 1, background: 'var(--color-border)', borderRadius: 4, height: 14, position: 'relative' }}>
@@ -75,7 +75,7 @@ function Panel({
                 }}
               />
             </span>
-            <span style={{ width: 24, fontSize: 12.5, textAlign: 'right' }}>{row.count}</span>
+            <span className="meta" style={{ width: 24, textAlign: 'right' }}>{row.count}</span>
           </button>
         ))}
       </div>
@@ -105,12 +105,12 @@ export function ProjectLandingPage({ projectId, categories, users, onNavigateFil
     <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
       <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
         <div className="card" style={{ padding: 14 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>Tickets gesamt</div>
-          <div style={{ fontSize: 24, fontWeight: 700 }}>{points.length}</div>
+          <div className="hinweis">Tickets gesamt</div>
+          <div className="kennzahl">{points.length}</div>
         </div>
         <div className="card" style={{ padding: 14 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>Überfällig</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: overdueCount > 0 ? 'var(--color-danger)' : undefined }}>
+          <div className="hinweis">Überfällig</div>
+          <div className={`kennzahl ${overdueCount > 0 ? 'kennzahl-warnung' : ''}`}>
             {overdueCount}
           </div>
         </div>

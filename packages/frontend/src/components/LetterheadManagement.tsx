@@ -45,11 +45,11 @@ export function LetterheadManagement() {
     }
   }
 
-  if (!values) return <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Lädt…</p>
+  if (!values) return <p className="hinweis">Lädt…</p>
 
   return (
     <form onSubmit={handleSubmit}>
-      <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+      <p className="hinweis" style={{ marginBottom: 12 }}>
         Diese Absender-Angaben erscheinen im Briefkopf/der Fußzeile von generierten Berichten (z. B.
         Abnahmeprotokoll).
       </p>
@@ -66,7 +66,7 @@ export function LetterheadManagement() {
         <button type="submit" className="btn btn-primary btn-sm">
           Speichern
         </button>
-        {status && <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{status}</span>}
+        {status && <span className="hinweis">{status}</span>}
       </div>
     </form>
   )

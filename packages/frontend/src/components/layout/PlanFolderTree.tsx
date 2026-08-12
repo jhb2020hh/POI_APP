@@ -112,7 +112,7 @@ export function PlanFolderTree({
               value={plan.folder_id ?? ''}
               onChange={(e) => handleMovePlan(plan, e.target.value)}
               title="In Ordner verschieben"
-              style={{ width: 26, fontSize: 10, opacity: 0.7, marginRight: 4 }}
+              className="baum-griff" style={{ width: 26, marginRight: 4 }}
             >
               <option value="">📂</option>
               {folders.map((f) => (
@@ -181,7 +181,7 @@ export function PlanFolderTree({
           </button>
         </div>
       )}
-      {status && <p style={{ fontSize: 12, color: 'var(--sidebar-text-muted)', padding: '0 8px' }}>{status}</p>}
+      {status && <p className="sidebar-hinweis" style={{ padding: '0 8px' }}>{status}</p>}
       <ul className="sidebar-list">
         {rootFolders.map((f) => renderFolder(f, 0))}
         {rootPlans.map((p) => renderPlan(p, 0))}

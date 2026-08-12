@@ -390,7 +390,7 @@ export function PdfViewer({
   if (error) {
     return (
       <div>
-        <p style={{ color: 'var(--color-danger)' }}>PDF konnte nicht geladen werden: {error}</p>
+        <p className="hinweis hinweis-fehler">PDF konnte nicht geladen werden: {error}</p>
         <button type="button" className="icon-btn" onClick={() => setRetryCount((c) => c + 1)}>
           Erneut versuchen
         </button>
@@ -483,7 +483,7 @@ export function PdfViewer({
         {/* Bezugsgroesze ist die eingepasste Seite: 100 % heiszt "alles
             sichtbar". Gegen DEFAULT_SCALE zu rechnen ergab je nach Planformat
             voellig verschiedene Zahlen fuer denselben Anblick. */}
-        <span style={{ fontSize: 12, minWidth: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>
+        <span className="hinweis" style={{ minWidth: 40, textAlign: 'center' }}>
           {Math.round((scale / (einpassMassstab ?? DEFAULT_SCALE)) * 100)}%
         </span>
         <button

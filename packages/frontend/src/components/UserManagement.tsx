@@ -96,7 +96,7 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
           <h4 style={{ marginBottom: 4 }}>
             Wartet auf Freischaltung ({offeneAntraege.length})
           </h4>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+          <p className="hinweis" style={{ marginBottom: 10 }}>
             Selbst registrierte Zugänge. Bis zur Freischaltung ist keine Anmeldung möglich.
             Nach dem Freischalten gilt die Rolle „Extern"; Projekte werden separat zugeordnet.
           </p>
@@ -118,7 +118,7 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
               >
                 <span>
                   <strong>{u.display_name}</strong>{' '}
-                  <span style={{ color: 'var(--color-text-muted)' }}>· {u.email}</span>
+                  <span className="meta">· {u.email}</span>
                 </span>
                 <span style={{ display: 'flex', gap: 6 }}>
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => entscheide(u, true)}>
@@ -189,7 +189,7 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
           <button type="submit" className="btn btn-primary btn-sm">
             Nutzer anlegen
           </button>
-          {status && <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{status}</span>}
+          {status && <span className="hinweis">{status}</span>}
         </div>
       </form>
 
@@ -210,7 +210,7 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
             >
               <span>
                 <strong>{u.display_name}</strong>{' '}
-                <span style={{ color: 'var(--color-text-muted)' }}>· {u.email}</span>
+                <span className="meta">· {u.email}</span>
               </span>
               <span className="badge badge-neutral">{u.role}</span>
             </li>

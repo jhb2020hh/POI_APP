@@ -73,7 +73,7 @@ export function TicketOverview({ points, categories, users, onSelect }: TicketOv
             <tr key={p.id} onClick={() => onSelect(p)}>
               <td
                 data-label="Ticket-Nr."
-                style={{ fontSize: 12, color: 'var(--color-text-faint)', whiteSpace: 'nowrap' }}
+                className="meta" style={{ whiteSpace: 'nowrap' }}
               >
                 {p.ticket_number ?? 'wird vergeben'}
               </td>
@@ -87,7 +87,7 @@ export function TicketOverview({ points, categories, users, onSelect }: TicketOv
               </td>
               <td data-label="Priorität">{p.priority && <PriorityBadge priority={p.priority} />}</td>
               <td data-label="Zuständig">{assignee && <Avatar name={assignee.display_name} />}</td>
-              <td data-label="Fällig" style={{ fontSize: 12, color: 'var(--color-text-faint)' }}>
+              <td data-label="Fällig" className="meta">
                 {p.due_date ?? ''}
               </td>
             </tr>

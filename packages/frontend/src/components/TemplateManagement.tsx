@@ -39,7 +39,7 @@ export function TemplateManagement({ templates, onChanged }: TemplateManagementP
 
   return (
     <div>
-      <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+      <p className="hinweis" style={{ marginBottom: 12 }}>
         Zentral verwaltete Ticketvorlagen. Sie stehen automatisch in jedem Projekt zur Auswahl.
       </p>
 
@@ -69,7 +69,7 @@ export function TemplateManagement({ templates, onChanged }: TemplateManagementP
           </div>
         ))}
         {templates.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Noch keine zentralen Vorlagen angelegt.</p>
+          <p className="hinweis">Noch keine zentralen Vorlagen angelegt.</p>
         )}
       </div>
 
@@ -104,7 +104,7 @@ export function TemplateManagement({ templates, onChanged }: TemplateManagementP
                 </div>
               ))}
               {archived.length === 0 && (
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Keine archivierten Vorlagen.</p>
+                <p className="hinweis">Keine archivierten Vorlagen.</p>
               )}
             </div>
           </>

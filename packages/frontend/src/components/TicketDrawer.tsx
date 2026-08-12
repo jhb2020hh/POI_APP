@@ -115,7 +115,7 @@ export function TicketDrawer({
           <span className="drawer-title">
             {mode === 'create' ? 'Neues Ticket' : 'Ticket bearbeiten'}
             {mode === 'edit' && point && (
-              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>
+              <span className="hinweis" style={{ marginLeft: 8, fontWeight: 400 }}>
                 {point.ticket_number ?? 'wird vergeben'}
               </span>
             )}
@@ -244,7 +244,7 @@ export function TicketDrawer({
                     disabled={!isOnline}
                   />
                   {!isOnline && (
-                    <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                    <p className="hinweis" style={{ marginTop: 6 }}>
                       Offline: Anlagen können erst online hochgeladen werden.
                     </p>
                   )}

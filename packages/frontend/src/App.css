@@ -243,6 +243,13 @@
   height: 6px;
 }
 
+/* Auf-/Zuklapp-Pfeil im Zeichnungsbaum. Stand vorher bei 10 px - unter der
+   Groesse, die sich zuverlaessig treffen und erkennen laesst. */
+.baum-griff {
+  font-size: var(--schrift-winzig);
+  opacity: 0.7;
+}
+
 /* Schiebt den Bereich mit Einstellungen und Offline-Schaltflaeche an den
    unteren Rand der Leiste. */
 .sidebar-section-unten {
@@ -872,14 +879,53 @@ textarea {
    Darstellung - deshalb gehoert das Muster in eine Klasse, nicht in die
    Bausteine. */
 
+/* Erklaerender Text neben einer Eingabe oder unter einer Liste. Haeufigster
+   Fall im JSX war fontSize: 13 mit --color-text-muted. */
 .hinweis {
-  font-size: var(--schrift-mini);
+  font-size: var(--schrift-klein);
   line-height: 1.5;
   color: var(--color-text-muted);
   margin: 0;
 }
 
+/* Nebenangaben an einem Datensatz: Ticketnummer, Datum, Dateigroesse. Eine
+   Stufe kleiner und blasser als ein Hinweis - aber lesbar, siehe die
+   Kontrastwerte in index.css. */
+.meta {
+  font-size: var(--schrift-mini);
+  line-height: 1.5;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+/* Zusaetze zu .hinweis oder .meta, nicht eigenstaendig. */
 .hinweis-fehler {
+  color: var(--color-danger);
+}
+
+.hinweis-erfolg {
+  color: var(--color-success);
+}
+
+/* Grosse Zahl in einer Kennzahlenkachel. */
+.kennzahl {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.kennzahl-warnung {
+  color: var(--color-danger);
+}
+
+/* Schaltflaeche, deren Beschriftung eine zerstoerende Wirkung ankuendigt -
+   "Projekt loeschen", "Entfernen". Vorher als style={{ color: ... }} direkt am
+   Element, wo es sich jeder Aenderung an der Darstellung entzog. */
+.btn-ghost-gefahr {
+  color: var(--color-danger);
+}
+
+.btn-ghost-gefahr:hover:not(:disabled) {
+  background: var(--color-danger-bg);
   color: var(--color-danger);
 }
 

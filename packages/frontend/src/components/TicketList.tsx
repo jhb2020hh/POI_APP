@@ -31,7 +31,7 @@ export function TicketList({ points, categories, users, onSelect }: TicketListPr
               {p.priority && <PriorityBadge priority={p.priority} />}
               {assignee && <Avatar name={assignee.display_name} />}
               {p.due_date && (
-                <span style={{ fontSize: '12px', color: 'var(--color-text-faint)' }}>{p.due_date}</span>
+                <span className="meta">{p.due_date}</span>
               )}
             </div>
           </div>

@@ -17,7 +17,7 @@ export function DynamicFieldForm({ fields, values, onChange }: DynamicFieldFormP
           return (
             <div key={field.key} className="field" style={{ opacity: 0.6 }}>
               <span className="field-label">{field.label}</span>
-              <p style={{ fontSize: 12, margin: 0 }}>
+              <p className="hinweis">
                 Feldtyp "{field.type}" wird in einer späteren Ausbaustufe unterstützt.
               </p>
             </div>
