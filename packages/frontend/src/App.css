@@ -76,6 +76,12 @@
   flex-direction: column;
   overflow-y: auto;
   transition: width 0.18s ease;
+  /* Toene der Symbolknoepfe auf dunklem Grund. #8b91a2 auf #191c25 ergibt rund
+     5,2:1, im Hover etwa 11:1 - beides ueber der Grenze von 4,5:1. Steht hier
+     und nicht an jedem Knopf, damit auch spaeter hinzukommende folgen. */
+  --icon-farbe: var(--sidebar-text-muted);
+  --icon-farbe-stark: var(--sidebar-text);
+  --icon-grund-aktiv: var(--sidebar-hover-bg);
 }
 
 /* Eingeklappt heisst Breite null, nicht display:none - so bleibt der Uebergang
@@ -243,11 +249,70 @@
   height: 6px;
 }
 
-/* Auf-/Zuklapp-Pfeil im Zeichnungsbaum. Stand vorher bei 10 px - unter der
-   Groesse, die sich zuverlaessig treffen und erkennen laesst. */
-.baum-griff {
-  font-size: var(--schrift-winzig);
-  opacity: 0.7;
+/* ---------- Zeichnungsbaum ---------- */
+
+.baum-zeile {
+  display: flex;
+  align-items: center;
+}
+
+.baum-ordnerzeile {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Der Auf-/Zuklapp-Knopf sitzt vor dem Ordnerzeichen und braucht keinen
+   eigenen Grund - sonst haette jede Ordnerzeile zwei konkurrierende Flaechen. */
+.baum-klappe {
+  margin-left: -4px;
+}
+
+/* Verschieben in einen Ordner: sichtbar sind die beiden Zeichen, bedient wird
+   das unsichtbar darueberliegende Auswahlfeld. Deshalb traegt der Rahmen die
+   Optik und das Feld nur die Flaeche. */
+.baum-verschieben {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  height: 24px;
+  padding: 0 4px;
+  margin-right: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--icon-farbe, var(--color-text-muted));
+}
+
+.baum-verschieben:hover {
+  background: var(--icon-grund-aktiv, var(--color-surface-hover));
+  color: var(--icon-farbe-stark, var(--color-text));
+}
+
+.baum-verschieben select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Ohne das saehe man bei Tastaturbedienung nicht, dass das Feld den Fokus hat -
+   es ist ja durchsichtig. Der Rahmen wandert deshalb auf die Huelle. */
+.baum-verschieben:has(select:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  .baum-verschieben {
+    height: var(--touch-ziel);
+    padding: 0 10px;
+  }
 }
 
 /* Schiebt den Bereich mit Einstellungen und Offline-Schaltflaeche an den
@@ -647,10 +712,6 @@ textarea {
 
 /* ---------- Plan workspace ---------- */
 
-/* Bezugsrahmen der Zoomleiste. Bewusst hier und nicht auf .plan-canvas-area:
-   ein absolut gesetztes Element in einem scrollenden Kasten scrollt mit dessen
-   Inhalt mit - die Leiste wanderte beim Schwenken ueber den Plan davon. Liegt
-   der Bezugsrahmen ausserhalb des Scrollbehaelters, bleibt sie stehen. */
 .plan-workspace {
   position: relative;
   flex: 1;
@@ -658,13 +719,86 @@ textarea {
   min-height: 0;
 }
 
+/* Die Zeichenflaeche scrollt nicht mehr. Geschwenkt wird jetzt ueber eine
+   Transformation der Buehne darin - das aendert kein Layout, springt nicht und
+   funktioniert mit Maus, Finger und Trackpad gleichermaszen. Die frueheren
+   20 px Innenabstand stecken jetzt im Einpassmaszstab (EINPASS_LUFT_PX). */
 .plan-canvas-area {
   flex: 1;
   min-width: 0;
-  overflow: auto;
-  padding: 20px;
   display: flex;
-  justify-content: safe center;
+  overflow: hidden;
+}
+
+.plan-flaeche {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  /* Der Browser soll Wisch- und Kneifgesten nicht selbst auswerten - sonst
+     zoomt er die ganze Seite, waehrend wir den Plan schwenken wollen. */
+  touch-action: none;
+  cursor: grab;
+}
+
+/* Der Rahmen muss nach innen: die Flaeche fuellt ihren Kasten vollstaendig
+   aus, ein Rahmen mit Abstand nach auszen wuerde abgeschnitten. */
+.plan-flaeche:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Auf dem Blatt legt ein Klick ein Ticket an - dort also das Fadenkreuz.
+   Daneben ist leere Flaeche, die sich nur schieben laesst. */
+.plan-buehne {
+  cursor: crosshair;
+}
+
+.plan-flaeche:active,
+.plan-flaeche:active .plan-buehne {
+  cursor: grabbing;
+}
+
+.plan-flaeche-fehler {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: default;
+}
+
+/* Feste CSS-Groesze: die Seite im Einpassmaszstab. Bewegt und vergroeszert
+   wird ausschlieszlich ueber transform, damit das Nachschaerfen des Bitmaps
+   nichts verschiebt. */
+.plan-buehne {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.plan-blatt {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.plan-pin {
+  position: absolute;
+  transform-origin: bottom center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  color: #fff;
+  line-height: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
 }
 
 .plan-ticket-panel {
@@ -1224,6 +1358,12 @@ textarea {
 
 /* ---------- Misc ---------- */
 
+/* Der Ton kommt aus der Umgebung, nicht fest aus dem hellen Satz.
+   Vorher stand hier `var(--color-text-muted)` - ein Ton fuer helle Flaechen.
+   Auf dem dunklen Grund der Seitenleiste ergab das rund 2,9:1 und lag damit
+   unter der Lesbarkeitsgrenze von 4,5:1; die Zeichen dort waren praktisch
+   unsichtbar. Ueber die beiden Variablen setzt jede Flaeche ihre eigenen
+   Toene einmal, und jeder Symbolknopf darin folgt - auch kuenftige. */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -1233,13 +1373,43 @@ textarea {
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--icon-farbe, var(--color-text-muted));
   cursor: pointer;
 }
 
 .icon-btn:hover {
+  background: var(--icon-grund-aktiv, var(--color-surface-hover));
+  color: var(--icon-farbe-stark, var(--color-text));
+}
+
+/* Fuer dichte Zeilen wie den Zeichnungsbaum. 24 px ist das Mindestmasz einer
+   Zielflaeche; die Touchregel weiter unten hebt weiterhin auf 44 px an.
+   Vorher standen dort `style={{ width: 18, height: 18 }}` - Inline schlaegt
+   Klasse, damit war auch die Touchregel wirkungslos. */
+.icon-btn-klein {
+  width: 24px;
+  height: 24px;
+}
+
+/* Sortierknopf in einer Tabellenueberschrift. Stand vorher auf .icon-btn -
+   das ist ein Quadrat von 30 px fuer ein einzelnes Zeichen und schnitt jede
+   Spaltenbeschriftung ab. */
+.tabellenkopf-knopf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabellenkopf-knopf:hover {
   background: var(--color-surface-hover);
-  color: var(--color-text);
 }
 
 .avatar {
@@ -1505,10 +1675,6 @@ textarea {
     display: none;
   }
 
-  .plan-canvas-area {
-    padding: 0;
-  }
-
   /* ---------- Ticketformular als Vollbild-Blatt ---------- */
   /* Mit height: 100vh lag die Fusszeile mit "Speichern" unter der
      Adressleiste des Browsers und war nicht erreichbar. */
@@ -1605,9 +1771,35 @@ textarea {
 }
 
 /* ---------- Zoom-Leiste des Plan-Viewers ---------- */
-/* Am Rechner fest oben links ueber der Zeichnung. Der Bezugsrahmen ist
-   .plan-workspace, nicht der scrollende Kasten darunter - sonst wandert die
-   Leiste beim Schwenken mit dem Plan davon. */
+/* Am Rechner fest oben links ueber der Zeichnung. Sie liegt neben der Buehne,
+   nicht darin - was bewegt wird, ist ausschlieszlich die Buehne, die Leiste
+   bleibt deshalb stehen. */
+
+.pdf-zoom-wert {
+  min-width: 52px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--schrift-mini);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: pointer;
+}
+
+.pdf-zoom-wert:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.pdf-zoom-hinweis {
+  padding: 0 6px;
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--schrift-mini);
+  white-space: nowrap;
+}
 
 .pdf-zoom-toolbar {
   position: absolute;

@@ -1,3 +1,5 @@
+import { Zeichen } from '../Zeichen'
+
 interface TopBarProps {
   projectName?: string
   isOnline: boolean
@@ -38,7 +40,7 @@ export function TopBar({
           aria-expanded={navigationSichtbar}
           title={navigationSichtbar ? 'Navigation ausblenden' : 'Navigation einblenden'}
         >
-          ☰
+          <Zeichen name="menue" groesse={18} />
         </button>
         <span className="app-topbar-brand">POI-App</span>
         {projectName && (
@@ -64,12 +66,14 @@ export function TopBar({
           className="btn btn-ghost btn-sm"
           onClick={onOpenBenachrichtigungen}
           title="Erinnerungen per E-Mail"
+          aria-label="Erinnerungen per E-Mail"
         >
-          ✉
+          <Zeichen name="post" />
         </button>
         {canAccessAdminMenu && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenAdminMenu}>
-            ⚙ Admin
+            <Zeichen name="einstellungen" />
+            Admin
           </button>
         )}
         <button type="button" className="btn btn-ghost btn-sm" onClick={onLogout}>

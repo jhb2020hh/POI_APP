@@ -5,6 +5,7 @@ import { ProjectAdmin } from './ProjectAdmin'
 import { UserManagement } from './UserManagement'
 import { TemplateManagement } from './TemplateManagement'
 import { LetterheadManagement } from './LetterheadManagement'
+import { Zeichen } from './Zeichen'
 
 interface AdminMenuProps {
   users: UserSummary[]
@@ -33,7 +34,7 @@ export function AdminMenu({
         <div className="modal-header">
           <h3>Admin-Menü</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-            ✕
+            <Zeichen name="schliessen" />
           </button>
         </div>
         <div className="tabs">

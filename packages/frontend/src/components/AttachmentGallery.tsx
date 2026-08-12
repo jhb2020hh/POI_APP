@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Attachment } from '@poi-app/shared'
 import { attachmentFileUrl, getToken, listAttachments, uploadAttachment } from '../api/client'
+import { Zeichen } from './Zeichen'
 
 interface AttachmentGalleryProps {
   pointId: string
@@ -107,7 +108,8 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
               className="badge badge-neutral"
               style={{ textDecoration: 'none' }}
             >
-              📎 {a.file_name}
+              <Zeichen name="anhang" groesse={13} />
+              {a.file_name}
             </a>
           )
         )}

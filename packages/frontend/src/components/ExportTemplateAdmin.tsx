@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Zeichen } from './Zeichen'
 import {
   FESTE_EXPORT_SPALTEN,
   STANDARD_EXPORT_SPALTEN,
@@ -232,7 +233,7 @@ export function ExportTemplateAdmin({ projectId, istAdmin, onChanged }: ExportTe
                       title="Nach oben"
                       aria-label={`${beschriftung(key)} nach oben`}
                     >
-                      ↑
+                      <Zeichen name="pfeil-hoch" groesse={14} />
                     </button>
                     <button
                       type="button"
@@ -242,7 +243,7 @@ export function ExportTemplateAdmin({ projectId, istAdmin, onChanged }: ExportTe
                       title="Nach unten"
                       aria-label={`${beschriftung(key)} nach unten`}
                     >
-                      ↓
+                      <Zeichen name="pfeil-runter" groesse={14} />
                     </button>
                     <button
                       type="button"
@@ -251,7 +252,7 @@ export function ExportTemplateAdmin({ projectId, istAdmin, onChanged }: ExportTe
                       title="Entfernen"
                       aria-label={`${beschriftung(key)} entfernen`}
                     >
-                      ✕
+                      <Zeichen name="schliessen" groesse={14} />
                     </button>
                   </li>
                 ))}

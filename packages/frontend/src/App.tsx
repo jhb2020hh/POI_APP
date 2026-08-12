@@ -62,6 +62,7 @@ import { exportPlansToPdf } from './utils/planExportPdf'
 import { exportAbnahmeprotokoll } from './utils/abnahmeprotokollExport'
 import { AbnahmeprotokollDialog } from './components/AbnahmeprotokollDialog'
 import { getLetterhead } from './api/client'
+import { Zeichen } from './components/Zeichen'
 import './App.css'
 
 type DrawerState = { mode: 'create'; x: number; y: number } | { mode: 'edit'; point: Point }
@@ -972,6 +973,7 @@ function App() {
                     selectedPointId={drawer?.mode === 'edit' ? drawer.point.id : undefined}
                     onCanvasClick={handleCanvasClick}
                     onPointClick={handlePointClick}
+                    seitenzahl={plans.find((p) => p.id === selectedPlanId)?.page_count}
                   />
                 </div>
                 <div className={`plan-ticket-panel ${ticketleisteSichtbar ? '' : 'ist-verborgen'}`}>
@@ -984,7 +986,7 @@ function App() {
                       title="Ticketliste ausblenden"
                       aria-label="Ticketliste ausblenden"
                     >
-                      ›
+                      <Zeichen name="chevron-rechts" groesse={14} />
                     </button>
                   </div>
                   <TicketList points={points} categories={categories} users={users} onSelect={handlePointClick} />
@@ -999,7 +1001,7 @@ function App() {
                     title="Ticketliste einblenden"
                     aria-label="Ticketliste einblenden"
                   >
-                    ‹
+                    <Zeichen name="chevron-links" groesse={14} />
                   </button>
                 )}
               </div>
@@ -1097,7 +1099,7 @@ function App() {
                 aria-label="Meldung schließen"
                 title="Meldung schließen"
               >
-                ✕
+                <Zeichen name="schliessen" groesse={14} />
               </button>
             </div>
           )}
@@ -1111,7 +1113,7 @@ function App() {
                 aria-label="Meldung schließen"
                 title="Meldung schließen"
               >
-                ✕
+                <Zeichen name="schliessen" groesse={14} />
               </button>
             </div>
           )}
@@ -1125,7 +1127,7 @@ function App() {
                 aria-label="Meldung schließen"
                 title="Meldung schließen"
               >
-                ✕
+                <Zeichen name="schliessen" groesse={14} />
               </button>
             </div>
           )}

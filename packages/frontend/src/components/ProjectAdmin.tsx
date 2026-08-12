@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Project } from '@poi-app/shared'
+import { Zeichen } from './Zeichen'
 import {
   archiveProject,
   deleteProject,
@@ -217,7 +218,7 @@ export function ProjectAdmin({ projects, onChanged }: ProjectAdminProps) {
                 onClick={() => setLoeschKandidat(null)}
                 aria-label="Abbrechen"
               >
-                ✕
+                <Zeichen name="schliessen" />
               </button>
             </div>
             <div className="modal-body">

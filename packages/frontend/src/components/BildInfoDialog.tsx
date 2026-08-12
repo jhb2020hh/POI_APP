@@ -2,6 +2,7 @@ import type { Category } from '@poi-app/shared'
 import type { AttachmentWithPoint, UserSummary } from '../api/client'
 import type { Bildangaben } from '../utils/bildangaben'
 import { STATUS_LABELS } from '../constants'
+import { Zeichen } from './Zeichen'
 
 interface BildInfoDialogProps {
   anhang: AttachmentWithPoint
@@ -157,7 +158,7 @@ export function BildInfoDialog({
         <div className="modal-header">
           <h3>Angaben zum Foto</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-            ✕
+            <Zeichen name="schliessen" />
           </button>
         </div>
         <div className="modal-body">

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Zeichen } from './Zeichen'
 
 interface AbnahmeprotokollDialogProps {
   ticketCount: number
@@ -32,7 +33,7 @@ export function AbnahmeprotokollDialog({ ticketCount, onConfirm, onClose }: Abna
         <div className="modal-header">
           <h3>Abnahmeprotokoll erstellen</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-            ✕
+            <Zeichen name="schliessen" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="modal-body">

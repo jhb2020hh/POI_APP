@@ -25,6 +25,7 @@
     "diagnose:kategorie": "npm run diagnose:kategorie -w packages/backend --",
     "diagnose:export": "npm run diagnose:export -w packages/backend --",
     "diagnose:loeschen": "npm run diagnose:loeschen -w packages/backend --",
+    "diagnose:ansicht": "npm run diagnose:ansicht -w packages/frontend --",
     "seed:admin": "npm run seed:admin -w packages/backend --",
     "set:password": "npm run set:password -w packages/backend --",
     "set:role": "npm run set:role -w packages/backend --"

@@ -9,6 +9,7 @@ import {
 } from '../api/client'
 import { leseBildangaben, type Bildangaben } from '../utils/bildangaben'
 import { BildInfoDialog } from './BildInfoDialog'
+import { Zeichen } from './Zeichen'
 
 interface ProjectGalleryProps {
   projectId: string
@@ -199,7 +200,8 @@ export function ProjectGallery({
               : 'Aufsteigend — umschalten auf absteigend'
           }
         >
-          {absteigend ? '↓ absteigend' : '↑ aufsteigend'}
+          <Zeichen name={absteigend ? 'pfeil-runter' : 'pfeil-hoch'} groesse={14} />
+          {absteigend ? 'absteigend' : 'aufsteigend'}
         </button>
 
         <button
@@ -263,7 +265,8 @@ export function ProjectGallery({
               className="badge badge-neutral galerie-datei"
               title="Angaben zur Datei"
             >
-              📎 {a.file_name}
+              <Zeichen name="anhang" groesse={13} />
+              {a.file_name}
             </button>
           )
         )}

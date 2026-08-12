@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { setEmailBenachrichtigungen } from '../api/client'
+import { Zeichen } from './Zeichen'
 
 interface BenachrichtigungenDialogProps {
   /** Aktueller Stand aus dem Profil. */
@@ -41,7 +42,7 @@ export function BenachrichtigungenDialog({
         <div className="modal-header">
           <h3>Benachrichtigungen</h3>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-            ✕
+            <Zeichen name="schliessen" />
           </button>
         </div>
         <div className="modal-body">

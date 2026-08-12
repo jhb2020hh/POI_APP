@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Plan, PlanFolder, Project } from '@poi-app/shared'
 import type { CreateProjectInput, ExportTemplate } from '../../api/client'
 import { PlanFolderTree } from './PlanFolderTree'
+import { Zeichen } from '../Zeichen'
 
 // Sämtliche Ausgaben laufen über diesen einen Bereich. Früher lagen sie an vier
 // verschiedenen Stellen verteilt, teils mit abweichendem Ergebnis.
@@ -265,7 +266,8 @@ export function Sidebar({
                 className="btn btn-ghost-inverse btn-sm"
                 onClick={() => setShowCreateProject((v) => !v)}
               >
-                + Neu
+                <Zeichen name="plus" groesse={14} />
+                Neu
               </button>
               {selectedProjectId && (
                 <button
@@ -273,8 +275,9 @@ export function Sidebar({
                   className="btn btn-ghost-inverse btn-sm"
                   onClick={() => setProjectsCollapsed(true)}
                   title="Projektliste einklappen"
+                  aria-label="Projektliste einklappen"
                 >
-                  ▲
+                  <Zeichen name="chevron-oben" groesse={14} />
                 </button>
               )}
             </div>
@@ -349,14 +352,22 @@ export function Sidebar({
                 }}
                 title="Pläne, Abnahmeprotokoll oder Ticketliste ausgeben"
               >
-                {exportMode ? 'Abbrechen' : '⬇ Export'}
+                {exportMode ? (
+                  'Abbrechen'
+                ) : (
+                  <>
+                    <Zeichen name="herunterladen" groesse={14} />
+                    Export
+                  </>
+                )}
               </button>
               <button
                 type="button"
                 className="btn btn-ghost-inverse btn-sm"
                 onClick={() => setShowUploadPlan((v) => !v)}
               >
-                + PDF
+                <Zeichen name="plus" groesse={14} />
+                PDF
               </button>
             </div>
           </div>
@@ -391,7 +402,8 @@ export function Sidebar({
                 className={`sidebar-item ${dashboardActive ? 'active' : ''}`}
                 onClick={navigiere(onShowDashboard)}
               >
-                <span className="sidebar-item-label">🏠 Projekt-Dashboard</span>
+                <Zeichen name="haus" />
+                <span className="sidebar-item-label">Projekt-Dashboard</span>
               </button>
             </li>
             <li>
@@ -400,7 +412,8 @@ export function Sidebar({
                 className={`sidebar-item ${ticketOverviewActive ? 'active' : ''}`}
                 onClick={navigiere(onShowTicketOverview)}
               >
-                <span className="sidebar-item-label">📋 Alle Tickets</span>
+                <Zeichen name="liste" />
+                <span className="sidebar-item-label">Alle Tickets</span>
               </button>
             </li>
             <li>
@@ -409,7 +422,8 @@ export function Sidebar({
                 className={`sidebar-item ${galleryActive ? 'active' : ''}`}
                 onClick={navigiere(onShowGallery)}
               >
-                <span className="sidebar-item-label">🖼 Galerie</span>
+                <Zeichen name="bild" />
+                <span className="sidebar-item-label">Galerie</span>
               </button>
             </li>
             {plans.length === 0 && !showUploadPlan && <li className="sidebar-empty">Noch keine Pläne</li>}
@@ -547,7 +561,8 @@ export function Sidebar({
       {selectedProjectId && (
         <div className="sidebar-section sidebar-section-unten">
           <button type="button" className="btn btn-ghost-inverse btn-sm btn-block" onClick={onOpenSettings}>
-            ⚙ Projekt-Einstellungen
+            <Zeichen name="einstellungen" groesse={14} />
+            Projekt-Einstellungen
           </button>
           <div className="sidebar-abstand" />
           <button
@@ -556,7 +571,8 @@ export function Sidebar({
             onClick={onMakeOffline}
             disabled={!isOnline}
           >
-            ⬇ Offline verfügbar machen
+            <Zeichen name="herunterladen" groesse={14} />
+            Offline verfügbar machen
           </button>
           {offlineStatus && <p className="sidebar-hinweis sidebar-bereich">{offlineStatus}</p>}
         </div>

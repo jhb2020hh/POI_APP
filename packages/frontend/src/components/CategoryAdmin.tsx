@@ -8,6 +8,7 @@ import {
   type FieldSuggestion,
 } from '../api/client'
 import { CATEGORY_ICONS } from '../constants/categoryIcons'
+import { Zeichen } from './Zeichen'
 
 interface CategoryAdminProps {
   projectId?: string
@@ -192,8 +193,9 @@ export function CategoryAdmin({
             onClick={() => setCustomGlyph((v) => !v)}
             style={{ marginLeft: 4 }}
             title={customGlyph ? 'Aus Liste wählen' : 'Eigenes Zeichen eingeben'}
+            aria-label={customGlyph ? 'Aus Liste wählen' : 'Eigenes Zeichen eingeben'}
           >
-            {customGlyph ? '📋' : '✏'}
+            <Zeichen name={customGlyph ? 'liste' : 'bearbeiten'} groesse={14} />
           </button>
         </div>
       </div>

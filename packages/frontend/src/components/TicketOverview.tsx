@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Category } from '@poi-app/shared'
 import type { PointWithPlan, UserSummary } from '../api/client'
 import { Avatar, CategoryBadge, PriorityBadge, StatusBadge } from './ui/Badge'
+import { Zeichen } from './Zeichen'
 
 // Die Auswahlspalte diente allein dem Abnahmeprotokoll aus dieser Ansicht.
 // Saemtliche Ausgaben laufen jetzt ueber den Export-Bereich in der Baumleiste
@@ -37,9 +38,13 @@ export function TicketOverview({ points, categories, users, onSelect }: TicketOv
   })
 
   function headerButton(key: SortKey, label: string) {
+    const aktiv = sortKey === key
     return (
-      <button type="button" className="icon-btn" style={{ fontWeight: 600 }} onClick={() => toggleSort(key)}>
-        {label} {sortKey === key ? (sortDir === 1 ? '↑' : '↓') : ''}
+      // Die Breite kommt aus dem Text, nicht aus .icon-btn - das ist ein
+      // Quadrat fuer ein einzelnes Zeichen und schnitt die Beschriftung ab.
+      <button type="button" className="tabellenkopf-knopf" onClick={() => toggleSort(key)}>
+        {label}
+        {aktiv && <Zeichen name={sortDir === 1 ? 'pfeil-hoch' : 'pfeil-runter'} groesse={12} />}
       </button>
     )
   }

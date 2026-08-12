@@ -6,6 +6,7 @@ import {
   movePlanToFolder,
   renamePlanFolder,
 } from '../../api/client'
+import { Zeichen } from '../Zeichen'
 
 interface PlanFolderTreeProps {
   projectId: string
@@ -96,33 +97,43 @@ export function PlanFolderTree({
               onChange={() => onToggleExportSelection(plan.id)}
               style={{ marginRight: 6 }}
             />
-            <span className="sidebar-item-label">📄 {plan.name}</span>
+            <Zeichen name="datei" />
+            <span className="sidebar-item-label">{plan.name}</span>
           </label>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="baum-zeile">
             <button
               type="button"
               className={`sidebar-item sidebar-plan-item ${selectedPlanId === plan.id ? 'active' : ''}`}
               onClick={() => onSelectPlan(plan.id)}
               style={{ flex: 1, paddingLeft: 12 + depth * 14 }}
             >
-              <span className="sidebar-item-label">📄 {plan.name}</span>
+              <Zeichen name="datei" />
+              <span className="sidebar-item-label">{plan.name}</span>
             </button>
-            <select
-              value={plan.folder_id ?? ''}
-              onChange={(e) => handleMovePlan(plan, e.target.value)}
-              title="In Ordner verschieben"
-              aria-label={`${plan.name} in einen Ordner verschieben`}
-              className="baum-griff"
-              style={{ width: 26, marginRight: 4 }}
-            >
-              <option value="">📂</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+            {/* Vorher ein 26 px schmales Auswahlfeld, dessen einzige sichtbare
+                Beschriftung "📂" war - es sah aus wie eine Eingabe, war aber
+                ein Verschiebebefehl. Das native Auswahlfeld bleibt erhalten
+                und liegt jetzt unsichtbar ueber den Zeichen: Tastatur,
+                Vorleseprogramm und das systemeigene Auswahlfenster bleiben
+                damit unveraendert, nur das Aussehen wechselt. Ein selbst
+                gebautes Klappmenue muesste all das nachbauen. */}
+            <span className="baum-verschieben" title="In Ordner verschieben">
+              <Zeichen name="ordner" groesse={14} />
+              <Zeichen name="chevron-unten" groesse={10} />
+              <select
+                value={plan.folder_id ?? ''}
+                onChange={(e) => handleMovePlan(plan, e.target.value)}
+                aria-label={`${plan.name} in einen Ordner verschieben`}
+              >
+                <option value="">Kein Ordner</option>
+                {folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </span>
           </div>
         )}
       </li>
@@ -135,28 +146,46 @@ export function PlanFolderTree({
     const childPlans = plans.filter((p) => p.folder_id === folder.id)
     return (
       <li key={folder.id}>
-        <div className="sidebar-item" style={{ paddingLeft: 12 + depth * 14, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="sidebar-item baum-ordnerzeile" style={{ paddingLeft: 12 + depth * 14 }}>
           <button
             type="button"
+            className="icon-btn icon-btn-klein baum-klappe"
             onClick={() => toggleCollapsed(folder.id)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, width: 14 }}
             aria-label={isCollapsed ? 'Aufklappen' : 'Zuklappen'}
+            aria-expanded={!isCollapsed}
           >
-            {isCollapsed ? '▸' : '▾'}
+            <Zeichen name={isCollapsed ? 'chevron-rechts' : 'chevron-unten'} groesse={14} />
           </button>
-          <span className="sidebar-item-label" style={{ flex: 1 }}>
-            📁 {folder.name}
-          </span>
+          <Zeichen name="ordner" />
+          <span className="sidebar-item-label">{folder.name}</span>
           {!exportMode && (
             <>
-              <button type="button" className="icon-btn" title="Umbenennen" onClick={() => handleRenameFolder(folder)} style={{ width: 18, height: 18 }}>
-                ✏
+              {/* Die Masze standen frueher inline (18 x 18) und schlugen damit
+                  sowohl die Knopfgroesze als auch die Touchregel, die bei
+                  grober Zeigereingabe auf 44 px anheben soll. */}
+              <button
+                type="button"
+                className="icon-btn icon-btn-klein"
+                title={`Ordner "${folder.name}" umbenennen`}
+                onClick={() => handleRenameFolder(folder)}
+              >
+                <Zeichen name="bearbeiten" groesse={14} />
               </button>
-              <button type="button" className="icon-btn" title="Unterordner anlegen" onClick={() => handleCreateFolder(folder.id)} style={{ width: 18, height: 18 }}>
-                +
+              <button
+                type="button"
+                className="icon-btn icon-btn-klein"
+                title={`Unterordner in "${folder.name}" anlegen`}
+                onClick={() => handleCreateFolder(folder.id)}
+              >
+                <Zeichen name="plus" groesse={14} />
               </button>
-              <button type="button" className="icon-btn" title="Löschen" onClick={() => handleDeleteFolder(folder)} style={{ width: 18, height: 18 }}>
-                🗑
+              <button
+                type="button"
+                className="icon-btn icon-btn-klein"
+                title={`Ordner "${folder.name}" löschen`}
+                onClick={() => handleDeleteFolder(folder)}
+              >
+                <Zeichen name="loeschen" groesse={14} />
               </button>
             </>
           )}
@@ -179,7 +208,8 @@ export function PlanFolderTree({
       {!exportMode && (
         <div style={{ padding: '2px 8px 6px' }}>
           <button type="button" className="btn btn-ghost-inverse btn-sm" onClick={() => handleCreateFolder(null)}>
-            + Ordner
+            <Zeichen name="plus" groesse={14} />
+            Ordner
           </button>
         </div>
       )}

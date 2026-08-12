@@ -5,6 +5,7 @@ import { STATUS_LABELS } from '../constants'
 import { DynamicFieldForm } from './DynamicFieldForm'
 import { AttachmentGallery } from './AttachmentGallery'
 import { PointTimeline } from './PointTimeline'
+import { Zeichen } from './Zeichen'
 
 export interface TicketFormInput {
   title: string
@@ -121,7 +122,7 @@ export function TicketDrawer({
             )}
           </span>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-            ✕
+            <Zeichen name="schliessen" />
           </button>
         </div>
 
@@ -252,15 +253,16 @@ export function TicketDrawer({
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                       {stagedFiles.map((file, i) => (
                         <span key={i} className="badge badge-neutral" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          📎 {file.name}
+                          <Zeichen name="anhang" groesse={13} />
+                          {file.name}
                           <button
                             type="button"
-                            className="icon-btn"
+                            className="icon-btn icon-btn-klein"
                             onClick={() => removeStagedFile(i)}
-                            aria-label="Entfernen"
-                            style={{ width: 16, height: 16, lineHeight: '16px' }}
+                            aria-label={`${file.name} entfernen`}
+                            title="Entfernen"
                           >
-                            ✕
+                            <Zeichen name="schliessen" groesse={13} />
                           </button>
                         </span>
                       ))}

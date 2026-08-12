@@ -5,6 +5,7 @@ import { updateProjectDates } from '../api/client'
 import { CategoryAdmin } from './CategoryAdmin'
 import { ExportTemplateAdmin } from './ExportTemplateAdmin'
 import { CategoryBadge } from './ui/Badge'
+import { Zeichen } from './Zeichen'
 
 interface ProjectSettingsPanelProps {
   projectId: string
@@ -131,7 +132,7 @@ export function ProjectSettingsPanel({
               </>
             )}
             <button type="button" className="icon-btn" onClick={onClose} aria-label="Schließen">
-              ✕
+              <Zeichen name="schliessen" />
             </button>
           </div>
         </div>

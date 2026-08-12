@@ -279,7 +279,70 @@ nach. Zusätzlich wird geprüft, dass projektübergreifende Vorlagen den Vorgang
 
 ---
 
-## 7. Was sich gegenüber dem LAN-Betrieb geändert hat
+## 7. Planansicht und Symbole
+
+### Die Planansicht trennt Sehen und Zeichnen
+
+Der Betrachter hat zwei Ebenen, und diese Trennung ist der Grund, warum sich
+Zoomen und Schwenken flüssig anfühlen:
+
+```
+.plan-flaeche    der sichtbare Ausschnitt, fängt alle Eingaben ab
+  .plan-buehne   feste CSS-Größe (Seite im Einpassmaßstab),
+                 bewegt wird sie über transform
+    <canvas>     dieselbe CSS-Größe, Bitmap in der Auflösung des Zooms
+    Nadeln       in Prozent, gegen den Zoom skaliert
+```
+
+Sehen ist eine CSS-Transformation und wirkt sofort. Geschärft wird erst
+150 ms nach der letzten Bewegung — bis dahin skaliert der Browser das
+vorhandene Bild. Weil die Größe der Bühne dabei gleich bleibt, verschiebt das
+Schärfen nichts.
+
+Vorher trug eine Größe beides: sie bestimmte den Anblick **und** die Auflösung
+des Canvas. Deshalb hing jede Bewegung am Neuzeichnen, das Layout änderte sich
+dabei, und der Ausschnitt sprang.
+
+Die Rechnung dazu steht in `packages/frontend/src/utils/planAnsicht.ts` — ohne
+jeden Zugriff auf das Dokument, damit sie prüfbar bleibt:
+
+```bash
+npm run diagnose:ansicht
+```
+
+Prüft ohne Browser, dass der Punkt unter dem Zeiger beim Zoomen stehen bleibt,
+dass zehnmal hinein und heraus wieder bei 100 % landet, dass sich der Plan
+nicht aus dem Bild schieben lässt, dass Rad- und Trackpad-Ausschläge
+gleichwertig umgerechnet werden und dass das Bitmap unter der Canvas-Grenze der
+Browser bleibt.
+
+**Mehrseitige PDFs werden nicht unterstützt.** Angezeigt wird Seite 1, und neue
+Tickets werden mit `page_number = 1` geschrieben. Hat ein Plan mehr Seiten,
+steht das als Hinweis in der Zoomleiste — es soll nicht stillschweigend
+untergehen.
+
+### Symbole
+
+Alle Symbole der Oberfläche kommen aus `packages/frontend/src/components/Zeichen.tsx`:
+eingebettete SVG-Pfade, eine Strichstärke, Farbe über `currentColor`.
+
+Der Ton kommt aus der Umgebung, nicht fest aus dem hellen Farbsatz. `.icon-btn`
+liest `--icon-farbe`, und `.app-sidebar` setzt diese Variable einmal auf die
+Leistentöne. Wer eine weitere dunkle Fläche baut, setzt dort dieselben zwei
+Variablen — jeder Symbolknopf darin folgt dann automatisch.
+
+Das war vorher ein echter Fehler: `.icon-btn` stand fest auf
+`--color-text-muted`, einem Ton für helle Flächen. Auf dem Leistengrund ergab
+das rund 2,9:1 statt der nötigen 4,5:1. Der Papierkorb blieb trotzdem sichtbar,
+weil 🗑 ein Farb-Emoji ist und `color` ignoriert — Stift und Plus daneben
+verschwanden.
+
+Emoji bleiben nur dort, wo sie **Daten** sind: die selbst gewählten
+Kategoriezeichen auf den Nadeln.
+
+---
+
+## 8. Was sich gegenüber dem LAN-Betrieb geändert hat
 
 | Vorher | Jetzt |
 |---|---|
@@ -311,7 +374,7 @@ niemals im Frontend landen.
 
 ---
 
-## 8. Abnahme
+## 9. Abnahme
 
 Nach dem ersten Deployment der Reihe nach prüfen:
 
@@ -339,7 +402,7 @@ Es gibt im Projekt kein Test-Framework; diese Kette ist die Absicherung.
 
 ---
 
-## 9. Grenzen des kostenlosen Tarifs
+## 10. Grenzen des kostenlosen Tarifs
 
 - **Supabase Free** pausiert die Datenbank nach 7 Tagen ohne Zugriff; sie muss
   dann im Dashboard manuell reaktiviert werden. 500 MB Datenbank und 1 GB
