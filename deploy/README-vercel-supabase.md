@@ -72,7 +72,7 @@ Einmalig, aus dem Projektstamm mit gesetzter `.env`:
 
 ```bash
 npm install
-npm run db:migrate       # legt das Schema an (22 Migrationen)
+npm run db:migrate       # legt das Schema an (23 Migrationen)
 npm run setup:storage    # legt die privaten Ablagen "plans" und "attachments" an
 npm run seed:admin -- <email> "<anzeigename>" [rolle] [--password=<passwort>]
 ```
@@ -194,7 +194,7 @@ Admins — Letztere auch bei Tickets ohne Zuordnung, die sonst niemanden
 erreichen würden.
 
 **Doppelversand** ist über die Spalte `notifications.dedupe_key` ausgeschlossen
-(Migration `0022`). Der Schlüssel enthält die Frist selbst: wird ein Ticket
+(Migrationen `0022`/`0023`). Der Schlüssel enthält die Frist selbst: wird ein Ticket
 verschoben, wird die neue Frist wieder gemeldet. Der Anspruch auf eine Zeile
 wird **vor** dem Absenden eingetragen und bei einem Fehler zurückgenommen —
 zwei gleichzeitig laufende Aufrufe können deshalb nicht dieselbe Mail zweimal
