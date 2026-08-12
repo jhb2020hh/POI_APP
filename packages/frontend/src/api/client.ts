@@ -615,6 +615,24 @@ export function createGlobalCategory(input: {
   }).then((res) => json(res));
 }
 
+/**
+ * Aendert eine bestehende Vorlage - projektgebunden wie zentral, der Server
+ * entscheidet anhand der Vorlage selbst ueber die Berechtigung.
+ *
+ * shortCode fehlt absichtlich: er steckt in bereits vergebenen Ticketnummern
+ * und laesst sich deshalb nicht mehr aendern.
+ */
+export function updateCategory(
+  id: string,
+  input: { name?: string; color?: string; glyph?: string; fieldSchemaJson?: string }
+): Promise<Category> {
+  return authFetch(`/api/categories/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => json(res));
+}
+
 export function archiveGlobalCategory(id: string): Promise<void> {
   return authFetch(`/api/categories/${id}`, { method: "DELETE" }).then(() => undefined);
 }

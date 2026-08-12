@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { Category, FieldDef, FieldType } from '@poi-app/shared'
 import { FIELD_TYPE_LABELS_DE, RENDERABLE_FIELD_TYPES } from '@poi-app/shared'
-import { createCategory, listFieldSuggestions, type FieldSuggestion } from '../api/client'
+import {
+  createCategory,
+  listFieldSuggestions,
+  updateCategory,
+  type FieldSuggestion,
+} from '../api/client'
 import { CATEGORY_ICONS } from '../constants/categoryIcons'
 
 interface CategoryAdminProps {
@@ -14,17 +19,54 @@ interface CategoryAdminProps {
     shortCode?: string
     fieldSchemaJson?: string
   }) => Promise<Category>
+  /**
+   * Gesetzt heisst: bestehende Vorlage bearbeiten statt eine neue anlegen.
+   *
+   * Bewusst dasselbe Formular fuer beides. Ein zweiter, fast gleicher Baustein
+   * haette die Feldliste samt Vorschlaegen verdoppelt - den aufwendigen Teil -
+   * und beide waeren mit der Zeit auseinandergelaufen.
+   */
+  category?: Category
+  /** Nur im Bearbeitungsfall: zurueck zur Liste, ohne zu speichern. */
+  onCancel?: () => void
 }
 
-export function CategoryAdmin({ projectId, onCreated, createFn }: CategoryAdminProps) {
-  const [name, setName] = useState('')
-  const [shortCode, setShortCode] = useState('')
-  const [color, setColor] = useState('#3a86ff')
-  const [glyph, setGlyph] = useState(CATEGORY_ICONS[0])
-  const [customGlyph, setCustomGlyph] = useState(false)
-  const [fields, setFields] = useState<FieldDef[]>([])
+function leseFelder(schemaJson: string | undefined): FieldDef[] {
+  if (!schemaJson) return []
+  try {
+    const geparst = JSON.parse(schemaJson) as { fields?: FieldDef[] }
+    return geparst.fields ?? []
+  } catch {
+    return []
+  }
+}
+
+export function CategoryAdmin({
+  projectId,
+  onCreated,
+  createFn,
+  category,
+  onCancel,
+}: CategoryAdminProps) {
+  const bearbeitet = Boolean(category)
+
+  const [name, setName] = useState(category?.name ?? '')
+  const [shortCode, setShortCode] = useState(category?.short_code ?? '')
+  const [color, setColor] = useState(category?.color ?? '#3a86ff')
+  const [glyph, setGlyph] = useState(category?.glyph ?? CATEGORY_ICONS[0])
+  const [customGlyph, setCustomGlyph] = useState(
+    category ? !CATEGORY_ICONS.includes(category.glyph) : false
+  )
+  const [fields, setFields] = useState<FieldDef[]>(() => leseFelder(category?.field_schema_json))
   const [status, setStatus] = useState('')
   const [fieldSuggestions, setFieldSuggestions] = useState<FieldSuggestion[]>([])
+
+  // Welche Felder es urspruenglich gab - fuer den Hinweis, wenn eines
+  // verschwindet.
+  const [ursprungsFelder] = useState<FieldDef[]>(() => leseFelder(category?.field_schema_json))
+  const entfernteFelder = ursprungsFelder.filter(
+    (alt) => !fields.some((f) => f.key === alt.key)
+  )
 
   useEffect(() => {
     listFieldSuggestions().then(setFieldSuggestions).catch(() => setFieldSuggestions([]))
@@ -51,39 +93,52 @@ export function CategoryAdmin({ projectId, onCreated, createFn }: CategoryAdminP
     setFields((prev) => prev.filter((_, i) => i !== index))
   }
 
+  function setzeZurueck() {
+    setName('')
+    setShortCode('')
+    setGlyph(CATEGORY_ICONS[0])
+    setCustomGlyph(false)
+    setColor('#3a86ff')
+    setFields([])
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name) return
+    if (!name.trim()) return
     setStatus('Speichert…')
     try {
-      const input = {
-        name,
-        color,
-        glyph,
-        shortCode: shortCode.trim() || undefined,
-        fieldSchemaJson: JSON.stringify({ version: 1, fields }),
+      const fieldSchemaJson = JSON.stringify({ version: 1, fields })
+      if (category) {
+        // shortCode bleibt aussen vor: er steckt in bereits vergebenen
+        // Ticketnummern.
+        await updateCategory(category.id, { name: name.trim(), color, glyph, fieldSchemaJson })
+      } else {
+        const input = {
+          name: name.trim(),
+          color,
+          glyph,
+          shortCode: shortCode.trim() || undefined,
+          fieldSchemaJson,
+        }
+        if (createFn) {
+          await createFn(input)
+        } else if (projectId) {
+          await createCategory(projectId, input)
+        }
+        setzeZurueck()
       }
-      if (createFn) {
-        await createFn(input)
-      } else if (projectId) {
-        await createCategory(projectId, input)
-      }
-      setName('')
-      setShortCode('')
-      setGlyph(CATEGORY_ICONS[0])
-      setCustomGlyph(false)
-      setColor('#3a86ff')
-      setFields([])
       setStatus('')
       onCreated()
     } catch (err) {
-      setStatus(`Fehler: ${err}`)
+      setStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="card" style={{ padding: 14 }}>
-      <h4 style={{ marginBottom: 10 }}>Neue Kategorie</h4>
+      <h4 style={{ marginBottom: 10 }}>
+        {bearbeitet ? `Kategorie bearbeiten: ${category!.name}` : 'Neue Kategorie'}
+      </h4>
       <div className="field-row" style={{ marginBottom: 12, alignItems: 'flex-end' }}>
         <div className="field" style={{ flex: 1 }}>
           <span className="field-label">Name</span>
@@ -96,6 +151,12 @@ export function CategoryAdmin({ projectId, onCreated, createFn }: CategoryAdminP
             onChange={(e) => setShortCode(e.target.value.toUpperCase())}
             placeholder="automatisch"
             style={{ width: '7rem' }}
+            disabled={bearbeitet}
+            title={
+              bearbeitet
+                ? 'Der Kurzcode steckt in allen bereits vergebenen Ticketnummern und lässt sich deshalb nicht mehr ändern.'
+                : undefined
+            }
           />
         </div>
         <div className="field">
@@ -131,6 +192,13 @@ export function CategoryAdmin({ projectId, onCreated, createFn }: CategoryAdminP
           </button>
         </div>
       </div>
+
+      {bearbeitet && (
+        <p className="hinweis" style={{ marginBottom: 10 }}>
+          Der Kurzcode <strong>{category!.short_code ?? '–'}</strong> bleibt unverändert — er steht
+          in allen bereits vergebenen Ticketnummern.
+        </p>
+      )}
 
       <div className="field-label" style={{ marginBottom: 6 }}>
         Felder
@@ -189,11 +257,33 @@ export function CategoryAdmin({ projectId, onCreated, createFn }: CategoryAdminP
         + Feld hinzufügen
       </button>
 
+      {/* Entfernte Felder loeschen keine Werte - die Angaben stehen weiter in
+          den Tickets, werden nur nicht mehr angezeigt. Das muss man wissen,
+          bevor man speichert. */}
+      {entfernteFelder.length > 0 && (
+        <p className="hinweis" style={{ marginTop: 10 }}>
+          {entfernteFelder.length === 1 ? 'Das Feld ' : 'Die Felder '}
+          <strong>{entfernteFelder.map((f) => f.label || f.key).join(', ')}</strong>
+          {entfernteFelder.length === 1 ? ' wird' : ' werden'} nach dem Speichern nicht mehr
+          angezeigt. Bereits eingetragene Werte bleiben in den Tickets erhalten und erscheinen
+          wieder, wenn das Feld zurückkommt.
+        </p>
+      )}
+
       <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button type="submit" className="btn btn-primary btn-sm">
-          Kategorie anlegen
+          {bearbeitet ? 'Änderungen speichern' : 'Kategorie anlegen'}
         </button>
-        {status && <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{status}</span>}
+        {bearbeitet && onCancel && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+            Abbrechen
+          </button>
+        )}
+        {status && (
+          <span className={`hinweis ${status.startsWith('Fehler') ? 'hinweis-fehler' : ''}`}>
+            {status}
+          </span>
+        )}
       </div>
 
       <datalist id="category-field-keys">

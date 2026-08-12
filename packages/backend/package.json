@@ -20,6 +20,7 @@
     "diagnose:registrierung": "tsx src/scripts/diagnoseRegistrierung.ts",
     "diagnose:mail": "tsx src/scripts/diagnoseMail.ts",
     "diagnose:filter": "tsx src/scripts/diagnoseFilter.ts",
+    "diagnose:kategorie": "tsx src/scripts/diagnoseKategorie.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "set:password": "tsx src/scripts/setPassword.ts",
     "set:role": "tsx src/scripts/setRole.ts",

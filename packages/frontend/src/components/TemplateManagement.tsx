@@ -16,6 +16,7 @@ interface TemplateManagementProps {
 
 export function TemplateManagement({ templates, onChanged }: TemplateManagementProps) {
   const [archived, setArchived] = useState<Category[] | null>(null)
+  const [bearbeitet, setBearbeitet] = useState<Category | null>(null)
 
   async function handleArchive(name: string, id: string) {
     if (!confirm(`Ticketvorlage "${name}" wirklich archivieren? Sie ist danach in keinem Projekt mehr auswählbar (kann später wiederhergestellt werden).`)) {
@@ -56,9 +57,15 @@ export function TemplateManagement({ templates, onChanged }: TemplateManagementP
             }}
           >
             <CategoryBadge color={t.color} name={t.name} />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleArchive(t.name, t.id)}>
-              Archivieren
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {t.short_code && <span className="hinweis">{t.short_code}</span>}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBearbeitet(t)}>
+                Bearbeiten
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleArchive(t.name, t.id)}>
+                Archivieren
+              </button>
+            </div>
           </div>
         ))}
         {templates.length === 0 && (
@@ -104,7 +111,18 @@ export function TemplateManagement({ templates, onChanged }: TemplateManagementP
         )}
       </div>
 
-      <CategoryAdmin createFn={createGlobalCategory} onCreated={onChanged} />
+      {/* key: beim Wechsel der bearbeiteten Vorlage wird das Formular neu
+          aufgebaut, sonst blieben die Felder der vorherigen stehen. */}
+      <CategoryAdmin
+        key={bearbeitet?.id ?? 'neu'}
+        createFn={createGlobalCategory}
+        category={bearbeitet ?? undefined}
+        onCancel={() => setBearbeitet(null)}
+        onCreated={() => {
+          setBearbeitet(null)
+          onChanged()
+        }}
+      />
     </div>
   )
 }

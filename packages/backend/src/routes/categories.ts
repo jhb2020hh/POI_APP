@@ -3,11 +3,13 @@ import { getProjectById } from "../repositories/projectRepository.js";
 import {
   archiveCategory,
   createCategory,
+  getCategoryById,
   listArchivedGlobalCategories,
   listCategoriesForProject,
   listGlobalCategories,
   listUsedFieldDefs,
   unarchiveCategory,
+  updateCategory,
 } from "../repositories/categoryRepository.js";
 import { hasRole, requireProjectAccess, requireRole } from "../authorization.js";
 
@@ -89,6 +91,67 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
       createdBy: request.user.sub,
     });
     return reply.status(201).send(category);
+  });
+
+  /**
+   * Aendert eine Vorlage - projektgebunden oder zentral.
+   *
+   * Die Berechtigung haengt daran, um welche Art es sich handelt, und richtet
+   * sich nach denselben Regeln wie das Anlegen: zentrale Vorlagen nur fuer
+   * Admins, projekteigene fuer Mitarbeiter des jeweiligen Projekts. Deshalb
+   * kein preHandler, sondern eine Pruefung nach dem Nachschlagen.
+   *
+   * shortCode fehlt absichtlich: siehe updateCategory.
+   */
+  server.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      color?: string;
+      glyph?: string;
+      fieldSchemaJson?: string;
+    };
+  }>("/api/categories/:id", async (request, reply) => {
+    const bestehend = await getCategoryById(request.params.id);
+    if (!bestehend) {
+      return reply.status(404).send({ error: "Vorlage nicht gefunden" });
+    }
+
+    if (bestehend.project_id === null) {
+      if (!hasRole(request, ["admin"])) {
+        return reply
+          .status(403)
+          .send({ error: "Zentrale Vorlagen dürfen nur Administratoren ändern" });
+      }
+    } else {
+      if (!(await requireProjectAccess(request, reply, bestehend.project_id))) return;
+      if (!hasRole(request, ["mitarbeiter", "admin"])) {
+        return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
+      }
+    }
+
+    const { name, color, glyph, fieldSchemaJson } = request.body;
+    if (name !== undefined && !name.trim()) {
+      return reply.status(400).send({ error: "name darf nicht leer sein" });
+    }
+    if (fieldSchemaJson !== undefined) {
+      try {
+        JSON.parse(fieldSchemaJson);
+      } catch {
+        return reply.status(400).send({ error: "fieldSchemaJson ist kein gültiges JSON" });
+      }
+    }
+
+    const geaendert = await updateCategory(bestehend.id, {
+      name: name?.trim(),
+      color,
+      glyph,
+      fieldSchemaJson,
+    });
+    if (!geaendert) {
+      return reply.status(404).send({ error: "Vorlage nicht gefunden" });
+    }
+    return geaendert;
   });
 
   server.delete<{ Params: { id: string } }>(

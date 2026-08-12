@@ -48,6 +48,58 @@ export async function getCategoryById(id: string): Promise<Category | undefined>
   return db.prepare("SELECT * FROM categories WHERE id = ?").get<Category>(id);
 }
 
+/**
+ * Aendert eine bestehende Ticketvorlage.
+ *
+ * `short_code` ist bewusst *nicht* aenderbar. Er steckt in jeder bereits
+ * vergebenen Ticketnummer und bildet zusammen mit dem Projekt den Schluessel in
+ * `ticket_number_counters`. Ein neuer Kurzcode wuerde einen zweiten Zaehler bei
+ * 1 beginnen lassen, waehrend die alten Nummern weiter existieren - die
+ * Nummernkreise waeren zerrissen und Dubletten nur eine Frage der Zeit.
+ *
+ * Nur uebergebene Felder werden geschrieben; was fehlt, bleibt stehen.
+ */
+export async function updateCategory(
+  id: string,
+  input: {
+    name?: string;
+    color?: string;
+    glyph?: string;
+    fieldSchemaJson?: string;
+  }
+): Promise<Category | undefined> {
+  const zuweisungen: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (input.name !== undefined) {
+    zuweisungen.push("name = ?");
+    params.push(input.name);
+  }
+  if (input.color !== undefined) {
+    zuweisungen.push("color = ?");
+    params.push(input.color);
+  }
+  if (input.glyph !== undefined) {
+    zuweisungen.push("glyph = ?");
+    params.push(input.glyph);
+  }
+  if (input.fieldSchemaJson !== undefined) {
+    zuweisungen.push("field_schema_json = ?");
+    params.push(input.fieldSchemaJson);
+  }
+
+  // Ohne Zuweisung waere das SQL fehlerhaft - und ein Aufruf ohne Aenderung ist
+  // kein Fehler, sondern schlicht nichts zu tun.
+  if (zuweisungen.length === 0) return getCategoryById(id);
+
+  params.push(id);
+  const ergebnis = await db
+    .prepare(`UPDATE categories SET ${zuweisungen.join(", ")} WHERE id = ?`)
+    .run(...params);
+  if (ergebnis.changes === 0) return undefined;
+  return getCategoryById(id);
+}
+
 export async function listCategoriesForProject(projectId: string): Promise<Category[]> {
   return db
     .prepare(

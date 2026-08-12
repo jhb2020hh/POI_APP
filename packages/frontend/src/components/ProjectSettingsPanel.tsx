@@ -42,6 +42,7 @@ export function ProjectSettingsPanel({
   const [tab, setTab] = useState<'categories' | 'members' | 'dates'>('categories')
   const [newMemberEmail, setNewMemberEmail] = useState('')
   const [removeStatus, setRemoveStatus] = useState('')
+  const [bearbeiteteKategorie, setBearbeiteteKategorie] = useState<Category | null>(null)
 
   // Konten, die dem Projekt noch nicht zugeordnet sind - nur die gehoeren in
   // die Vorschlagsliste.
@@ -144,12 +145,45 @@ export function ProjectSettingsPanel({
         <div className="modal-body">
           {tab === 'categories' && (
             <div>
-              <div className="field-row" style={{ marginBottom: 12 }}>
+              {/* Vorher standen hier nur Farbschildchen - bearbeiten liess sich
+                  nichts. Jede Zeile fuehrt jetzt ins Formular. */}
+              <ul className="mitglieder-liste" style={{ marginBottom: 12 }}>
                 {categories.map((c) => (
-                  <CategoryBadge key={c.id} color={c.color} name={c.name} />
+                  <li key={c.id} className="mitglieder-zeile">
+                    <CategoryBadge color={c.color} name={c.name} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="hinweis">
+                        {c.project_id === null ? 'zentrale Vorlage' : 'im Projekt angelegt'}
+                        {c.short_code ? ` · ${c.short_code}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setBearbeiteteKategorie(c)}
+                      >
+                        Bearbeiten
+                      </button>
+                    </div>
+                  </li>
                 ))}
-              </div>
-              <CategoryAdmin projectId={projectId} onCreated={onCategoryCreated} />
+                {categories.length === 0 && (
+                  <p className="hinweis">Für dieses Projekt gibt es noch keine Kategorien.</p>
+                )}
+              </ul>
+
+              {/* key sorgt dafuer, dass das Formular beim Wechsel der Vorlage
+                  neu aufgebaut wird - sonst blieben die Felder der zuvor
+                  bearbeiteten Kategorie stehen. */}
+              <CategoryAdmin
+                key={bearbeiteteKategorie?.id ?? 'neu'}
+                projectId={projectId}
+                category={bearbeiteteKategorie ?? undefined}
+                onCancel={() => setBearbeiteteKategorie(null)}
+                onCreated={() => {
+                  setBearbeiteteKategorie(null)
+                  onCategoryCreated()
+                }}
+              />
             </div>
           )}
 
