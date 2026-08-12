@@ -40,6 +40,8 @@ export function PdfViewer({
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
   const renderTaskRef = useRef<RenderTask | null>(null)
   const renderDebounceRef = useRef<number | null>(null)
+  /** Maszstab, in dem die Zeichnung aktuell im Canvas steht. */
+  const gerendertRef = useRef<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
   const [scale, setScale] = useState(DEFAULT_SCALE)
@@ -64,12 +66,48 @@ export function PdfViewer({
     renderTaskRef.current = task
     try {
       await task.promise
+      gerendertRef.current = targetScale
       setSize({ width: viewport.width, height: viewport.height })
     } catch (err) {
       if ((err as { name?: string })?.name !== 'RenderingCancelledException') throw err
     } finally {
       if (renderTaskRef.current === task) renderTaskRef.current = null
     }
+  }, [])
+
+  function begrenzeMassstab(wert: number): number {
+    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(wert * 1000) / 1000))
+  }
+
+  function zoomBy(delta: number) {
+    setScale((s) => begrenzeMassstab(s + delta))
+  }
+
+  /** Der scrollende Kasten um die Zeichnung - er traegt das Schwenken. */
+  function scrollflaeche(): HTMLElement | null {
+    return cardRef.current?.closest('.plan-canvas-area') as HTMLElement | null
+  }
+
+  /**
+   * Passt den Plan beim Oeffnen in die Breite ein.
+   *
+   * Die Zeichenflaeche wurde bisher starr aus der PDF-Groesse berechnet: ein
+   * A3-Plan ergibt bei Maszstab 1,5 rund 1750 px Breite. Auf einem Smartphone
+   * sah man davon einen Ausschnitt von etwa einem Fuenftel, ohne Anhaltspunkt,
+   * wo man sich befindet.
+   */
+  const passeInBreiteEin = useCallback(async () => {
+    const pdf = pdfDocRef.current
+    const flaeche = scrollflaeche()
+    if (!pdf || !flaeche) return
+
+    const seite = await pdf.getPage(1)
+    const grundbreite = seite.getViewport({ scale: 1 }).width
+    // 24 px Luft, damit der Plan nicht bündig am Rand klebt.
+    const verfuegbar = flaeche.clientWidth - 24
+    if (verfuegbar <= 0 || grundbreite <= 0) return
+
+    setScale(begrenzeMassstab(verfuegbar / grundbreite))
   }, [])
 
   useEffect(() => {
@@ -88,6 +126,10 @@ export function PdfViewer({
         if (cancelled) return
         pdfDocRef.current = pdf
         await renderAtScale(DEFAULT_SCALE)
+        if (cancelled) return
+        // Erst nach dem ersten Rendern: vorher steht die Breite der
+        // Zeichenflaeche noch nicht fest.
+        await passeInBreiteEin()
       } catch (err) {
         if (!cancelled) setError(String(err))
       }
@@ -98,10 +140,14 @@ export function PdfViewer({
       cancelled = true
       pdfDocRef.current = null
     }
-  }, [fileUrl, renderAtScale, retryCount])
+  }, [fileUrl, renderAtScale, passeInBreiteEin, retryCount])
 
   useEffect(() => {
-    if (!pdfDocRef.current || scale === DEFAULT_SCALE) return
+    // Verglichen wird mit dem tatsaechlich gezeichneten Maszstab. Die fruehere
+    // Bedingung "ungleich DEFAULT_SCALE" liess das Zuruecksetzen ins Leere
+    // laufen: der Zielwert war genau DEFAULT_SCALE, also wurde nie neu
+    // gezeichnet und die Zeichnung blieb in der alten Vergroesserung stehen.
+    if (!pdfDocRef.current || gerendertRef.current === scale) return
     // Entprellt: schnelle Strg+Mausrad-Ticks loesen sonst bei jedem einzelnen
     // Schritt ein volles pdf.js-Rerendering aus.
     if (renderDebounceRef.current) window.clearTimeout(renderDebounceRef.current)
@@ -113,9 +159,6 @@ export function PdfViewer({
     }
   }, [scale, renderAtScale])
 
-  function zoomBy(delta: number) {
-    setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round((s + delta) * 1000) / 1000)))
-  }
 
   // Strg+Mausrad zoomt (wie Google Maps/Figma); normales Rad scrollt weiterhin
   // die umgebende .plan-canvas-area, damit das Schwenken groesser, reingezoomter
@@ -137,13 +180,104 @@ export function PdfViewer({
   // ohne Fehlerrueckmeldung: Rueckgabewert und Ausnahmen wurden verworfen.
   // Saemtliche Ausgaben laufen jetzt ueber den Export-Bereich in der Baumleiste.
 
-  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
-    const target = e.target as HTMLElement
-    if (target.dataset.pinMarker) return
+  /* ------------------------------------------------------------------------
+     Zeigerbedienung: Schwenken, Zwei-Finger-Zoom, Tippen
+     ------------------------------------------------------------------------
+     Frueher lag hier ein reines onClick. Auf einem Touchgeraet endet aber jede
+     Wischbewegung als Klick - jeder Schwenkversuch legte damit ein neues Ticket
+     an. Deshalb wird jetzt unterschieden: als Tippen gilt nur, was sich kaum
+     bewegt hat und kurz war.
+  */
+
+  const zeigerRef = useRef(new Map<number, { x: number; y: number }>())
+  const gesteRef = useRef<{ startAbstand: number; startMassstab: number } | null>(null)
+  const tippRef = useRef<{ x: number; y: number; zeit: number; verschoben: boolean } | null>(null)
+  const schwenkRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+
+  // Ab dieser Bewegung gilt es als Schwenken und nicht mehr als Tippen.
+  const TIPP_TOLERANZ_PX = 10
+  const TIPP_HOECHSTDAUER_MS = 600
+
+  function abstandTasten(): number {
+    const [a, b] = [...zeigerRef.current.values()]
+    if (!a || !b) return 0
+    return Math.hypot(a.x - b.x, a.y - b.y)
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    zeigerRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (zeigerRef.current.size === 2) {
+      // Zweiter Finger: aus Schwenken wird Zoomen, und aus dem Tippen nichts.
+      gesteRef.current = { startAbstand: abstandTasten(), startMassstab: scale }
+      tippRef.current = null
+      schwenkRef.current = null
+      return
+    }
+
+    if (zeigerRef.current.size === 1) {
+      const flaeche = scrollflaeche()
+      tippRef.current = { x: e.clientX, y: e.clientY, zeit: Date.now(), verschoben: false }
+      schwenkRef.current = flaeche
+        ? { x: e.clientX, y: e.clientY, left: flaeche.scrollLeft, top: flaeche.scrollTop }
+        : null
+    }
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!zeigerRef.current.has(e.pointerId)) return
+    zeigerRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    // Zwei Finger: Maszstab am Verhaeltnis der Fingerabstaende.
+    if (zeigerRef.current.size === 2 && gesteRef.current) {
+      const jetzt = abstandTasten()
+      if (gesteRef.current.startAbstand > 0 && jetzt > 0) {
+        setScale(begrenzeMassstab(gesteRef.current.startMassstab * (jetzt / gesteRef.current.startAbstand)))
+      }
+      return
+    }
+
+    const start = tippRef.current
+    if (!start) return
+
+    const bewegung = Math.hypot(e.clientX - start.x, e.clientY - start.y)
+    if (bewegung > TIPP_TOLERANZ_PX) start.verschoben = true
+
+    // Schwenken nur mit dem Finger oder Stift. Mit der Maus bleibt das
+    // gewohnte Verhalten: ziehen markiert, gescrollt wird mit dem Rad.
+    const schwenk = schwenkRef.current
+    const flaeche = scrollflaeche()
+    if (e.pointerType !== 'mouse' && schwenk && flaeche && start.verschoben) {
+      flaeche.scrollLeft = schwenk.left - (e.clientX - schwenk.x)
+      flaeche.scrollTop = schwenk.top - (e.clientY - schwenk.y)
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const start = tippRef.current
+    zeigerRef.current.delete(e.pointerId)
+    if (zeigerRef.current.size < 2) gesteRef.current = null
+    if (zeigerRef.current.size === 0) schwenkRef.current = null
+
+    if (!start) return
+    tippRef.current = null
+
+    // Pins haben eine eigene Behandlung.
+    const ziel = e.target as HTMLElement
+    if (ziel.dataset.pinMarker) return
+
+    const dauer = Date.now() - start.zeit
+    if (start.verschoben || dauer > TIPP_HOECHSTDAUER_MS) return
+
     const rect = e.currentTarget.getBoundingClientRect()
-    const relX = (e.clientX - rect.left) / rect.width
-    const relY = (e.clientY - rect.top) / rect.height
-    onCanvasClick(relX, relY)
+    onCanvasClick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+  }
+
+  function handlePointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    zeigerRef.current.delete(e.pointerId)
+    gesteRef.current = null
+    tippRef.current = null
+    schwenkRef.current = null
   }
 
   if (error) {
@@ -161,7 +295,10 @@ export function PdfViewer({
     <>
     <div
       ref={cardRef}
-      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       className="card"
       style={{
         position: 'relative',
@@ -172,6 +309,10 @@ export function PdfViewer({
         cursor: 'crosshair',
         overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)',
+        // Der Browser soll Wisch- und Zwei-Finger-Gesten nicht selbst
+        // auswerten - sonst zoomt er die ganze Seite, waehrend wir den Plan
+        // schwenken wollen.
+        touchAction: 'none',
       }}
     >
       <canvas ref={canvasRef} style={{ display: 'block' }} />
@@ -218,24 +359,11 @@ export function PdfViewer({
         )
       })}
     </div>
-      <div
-        className="pdf-zoom-toolbar"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'absolute',
-          top: 8,
-          right: 8,
-          zIndex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-sm)',
-          boxShadow: 'var(--shadow-sm)',
-          padding: 4,
-        }}
-      >
+      {/* Positionierung steckt in App.css: auf schmalen Bildschirmen sitzt die
+          Leiste unten am Bildschirmrand statt oben ueber der Zeichnung - dort
+          verdeckte sie einen Grossteil des sichtbaren Bereichs und scrollte
+          beim Schwenken aus dem Bild. */}
+      <div className="pdf-zoom-toolbar" onPointerDown={(e) => e.stopPropagation()}>
         <button
           type="button"
           className="icon-btn"
@@ -257,12 +385,14 @@ export function PdfViewer({
         >
           +
         </button>
+        {/* Zuruecksetzen heisst jetzt "auf Breite einpassen" - das ist der
+            Zustand, in dem der Plan geoeffnet wird, und auf schmalen
+            Bildschirmen der einzige, in dem man ihn ganz sieht. */}
         <button
           type="button"
           className="icon-btn"
-          onClick={() => setScale(DEFAULT_SCALE)}
-          disabled={scale === DEFAULT_SCALE}
-          title="Zoom zurücksetzen"
+          onClick={() => void passeInBreiteEin()}
+          title="Auf Breite einpassen"
         >
           ⟲
         </button>

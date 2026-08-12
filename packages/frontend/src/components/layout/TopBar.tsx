@@ -6,6 +6,8 @@ interface TopBarProps {
   onLogout: () => void
   canAccessAdminMenu: boolean
   onOpenAdminMenu: () => void
+  /** Blendet die Seitenleiste ein/aus - nur auf schmalen Bildschirmen sichtbar. */
+  onToggleSidebar: () => void
 }
 
 export function TopBar({
@@ -16,10 +18,19 @@ export function TopBar({
   onLogout,
   canAccessAdminMenu,
   onOpenAdminMenu,
+  onToggleSidebar,
 }: TopBarProps) {
   return (
     <header className="app-topbar">
       <div className="app-topbar-left">
+        <button
+          type="button"
+          className="icon-btn nur-mobil"
+          onClick={onToggleSidebar}
+          aria-label="Navigation ein-/ausblenden"
+        >
+          ☰
+        </button>
         <span className="app-topbar-brand">POI-App</span>
         {projectName && (
           <>

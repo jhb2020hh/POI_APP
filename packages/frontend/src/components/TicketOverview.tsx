@@ -67,19 +67,29 @@ export function TicketOverview({ points, categories, users, onSelect }: TicketOv
           const category = p.category_id ? categoryById.get(p.category_id) : undefined
           const assignee = p.assigned_to ? userById.get(p.assigned_to) : undefined
           return (
+            /* data-label traegt die Spaltenueberschrift mit: auf schmalen
+               Bildschirmen wird jede Zeile zur Karte, und die Beschriftung
+               steht dann vor dem Wert (siehe .data-table in App.css). */
             <tr key={p.id} onClick={() => onSelect(p)}>
-              <td style={{ fontSize: 12, color: 'var(--color-text-faint)', whiteSpace: 'nowrap' }}>
+              <td
+                data-label="Ticket-Nr."
+                style={{ fontSize: 12, color: 'var(--color-text-faint)', whiteSpace: 'nowrap' }}
+              >
                 {p.ticket_number ?? 'wird vergeben'}
               </td>
-              <td>{p.title}</td>
-              <td>{p.plan_name ?? '–'}</td>
-              <td>
+              <td data-label="Titel">{p.title}</td>
+              <td data-label="Zeichnung">{p.plan_name ?? '–'}</td>
+              <td data-label="Status">
                 <StatusBadge status={p.status} />
               </td>
-              <td>{category && <CategoryBadge color={category.color} name={category.name} />}</td>
-              <td>{p.priority && <PriorityBadge priority={p.priority} />}</td>
-              <td>{assignee && <Avatar name={assignee.display_name} />}</td>
-              <td style={{ fontSize: 12, color: 'var(--color-text-faint)' }}>{p.due_date ?? ''}</td>
+              <td data-label="Kategorie">
+                {category && <CategoryBadge color={category.color} name={category.name} />}
+              </td>
+              <td data-label="Priorität">{p.priority && <PriorityBadge priority={p.priority} />}</td>
+              <td data-label="Zuständig">{assignee && <Avatar name={assignee.display_name} />}</td>
+              <td data-label="Fällig" style={{ fontSize: 12, color: 'var(--color-text-faint)' }}>
+                {p.due_date ?? ''}
+              </td>
             </tr>
           )
         })}

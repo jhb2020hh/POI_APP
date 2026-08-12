@@ -40,6 +40,14 @@
 
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
 
+  /* Ab hier gilt das mobile Layout. Der Wert steht auch in einigen
+     @media-Abfragen - CSS kann Variablen dort nicht auswerten, deshalb bei
+     einer Aenderung beide Stellen anfassen. */
+  --breakpoint-mobil: 768px;
+
+  /* Mindestgroesse einer mit dem Finger bedienbaren Flaeche. */
+  --touch-ziel: 44px;
+
   font: 14px/1.5 var(--sans);
   color: var(--color-text);
   background: var(--color-bg);
@@ -56,12 +64,23 @@
 html,
 body,
 #root {
+  /* dvh statt vh: auf Mobilgeraeten waechst und schrumpft der sichtbare Bereich
+     mit der Adressleiste. Mit 100vh ragte die Anwendung darunter, und alles am
+     unteren Rand - etwa die Schaltflaechen im Ticketformular - war nicht
+     erreichbar. Die Angabe in Prozent bleibt als Rueckfallebene fuer aeltere
+     Browser davor stehen. */
   height: 100%;
+  height: 100dvh;
   margin: 0;
 }
 
 body {
+  /* Die Anwendung bringt ihre eigenen Scrollbereiche mit; die Seite selbst soll
+     nicht mitscrollen. overscroll-behavior verhindert zusaetzlich, dass eine
+     Wischbewegung am Rand die Seite neu laedt oder den Browser zurueckspringen
+     laesst. */
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 h1,

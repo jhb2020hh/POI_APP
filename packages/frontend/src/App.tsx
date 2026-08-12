@@ -102,6 +102,13 @@ function App() {
   const [pendingCount, setPendingCount] = useState(0)
   const [syncStatus, setSyncStatus] = useState('')
 
+  // Zustand des mobilen Layouts. Am Rechner ohne Wirkung: die zugehoerigen
+  // CSS-Regeln greifen erst unterhalb des Umbruchpunkts.
+  const [sidebarOffen, setSidebarOffen] = useState(false)
+  const [filterOffen, setFilterOffen] = useState(false)
+  // Plan und Ticketliste haben nebeneinander keinen Platz - es wird umgeschaltet.
+  const [mobilAnsicht, setMobilAnsicht] = useState<'plan' | 'tickets'>('plan')
+
   function refreshPendingCount() {
     getPendingChangeCount().then(setPendingCount)
   }
@@ -584,10 +591,23 @@ function App() {
         }}
         canAccessAdminMenu={canAccessAdminMenu}
         onOpenAdminMenu={() => setAdminMenuOpen(true)}
+        onToggleSidebar={() => setSidebarOffen((v) => !v)}
       />
 
       <div className="app-body">
+        {/* Fangflaeche, um die ausgefahrene Leiste wieder zu schliessen. Nur
+            unterhalb des Umbruchpunkts sichtbar (siehe .sidebar-backdrop). */}
+        {sidebarOffen && (
+          <button
+            type="button"
+            className="sidebar-backdrop nur-mobil"
+            aria-label="Navigation schließen"
+            onClick={() => setSidebarOffen(false)}
+          />
+        )}
         <Sidebar
+          istOffen={sidebarOffen}
+          onNavigiert={() => setSidebarOffen(false)}
           projects={projects}
           selectedProjectId={selectedProjectId}
           onSelectProject={setSelectedProjectId}
@@ -639,6 +659,14 @@ function App() {
             <>
               <div className="toolbar">
                 <span className="toolbar-title">Alle Tickets ({overviewPoints.length})</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm nur-mobil"
+                  onClick={() => setFilterOffen((v) => !v)}
+                >
+                  {filterOffen ? 'Filter ausblenden' : 'Filter'}
+                </button>
+                <div className={`toolbar-filter ${filterOffen ? 'ist-offen' : ''}`}>
                 <input
                   value={filterBauabschnitt}
                   onChange={(e) => setFilterBauabschnitt(e.target.value)}
@@ -701,6 +729,7 @@ function App() {
                 >
                   Filter zurücksetzen
                 </button>
+                </div>
                 {/* Export-Schaltflaechen entfallen hier: saemtliche Ausgaben
                     laufen jetzt ueber den Export-Bereich in der Baumleiste und
                     richten sich nach den hier gesetzten Filtern. */}
@@ -746,6 +775,32 @@ function App() {
             <>
               <div className="toolbar">
                 <span className="toolbar-title">{plans.find((p) => p.id === selectedPlanId)?.name}</span>
+                {/* Plan und Ticketliste haben auf schmalen Bildschirmen
+                    nebeneinander keinen Platz - hier wird umgeschaltet. */}
+                <span className="nur-mobil ansicht-umschalter">
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${mobilAnsicht === 'plan' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setMobilAnsicht('plan')}
+                  >
+                    Plan
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${mobilAnsicht === 'tickets' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setMobilAnsicht('tickets')}
+                  >
+                    Tickets ({points.length})
+                  </button>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm nur-mobil"
+                  onClick={() => setFilterOffen((v) => !v)}
+                >
+                  {filterOffen ? 'Filter ausblenden' : 'Filter'}
+                </button>
+                <div className={`toolbar-filter ${filterOffen ? 'ist-offen' : ''}`}>
                 <input
                   value={filterBauabschnitt}
                   onChange={(e) => setFilterBauabschnitt(e.target.value)}
@@ -783,9 +838,10 @@ function App() {
                 >
                   Filter zurücksetzen
                 </button>
+                </div>
               </div>
 
-              <div className="plan-workspace">
+              <div className={`plan-workspace ${mobilAnsicht === 'plan' ? 'zeigt-plan' : 'zeigt-tickets'}`}>
                 <div className="plan-canvas-area">
                   <PdfViewer
                     fileUrl={planFileUrl(selectedPlanId)}
@@ -855,30 +911,35 @@ function App() {
         />
       )}
 
-      {syncStatus && (
-        <div className="toast">
-          {syncStatus}
-          <button type="button" className="icon-btn" onClick={() => setSyncStatus('')}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      {conflictWarning && (
-        <div className="toast">
-          {conflictWarning}
-          <button type="button" className="icon-btn" onClick={() => setConflictWarning(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      {actionError && (
-        <div className="toast">
-          {actionError}
-          <button type="button" className="icon-btn" onClick={() => setActionError(null)}>
-            ✕
-          </button>
+      {/* Die drei Meldungen lagen alle auf derselben festen Position und damit
+          deckungsgleich uebereinander - waren mehrere aktiv, sah man nur eine.
+          Der Stapel setzt sie untereinander. */}
+      {(syncStatus || conflictWarning || actionError) && (
+        <div className="toast-stack">
+          {syncStatus && (
+            <div className="toast">
+              {syncStatus}
+              <button type="button" className="icon-btn" onClick={() => setSyncStatus('')}>
+                ✕
+              </button>
+            </div>
+          )}
+          {conflictWarning && (
+            <div className="toast">
+              {conflictWarning}
+              <button type="button" className="icon-btn" onClick={() => setConflictWarning(null)}>
+                ✕
+              </button>
+            </div>
+          )}
+          {actionError && (
+            <div className="toast">
+              {actionError}
+              <button type="button" className="icon-btn" onClick={() => setActionError(null)}>
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

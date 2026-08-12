@@ -514,6 +514,14 @@ textarea {
 
 /* ---------- Toolbar / filter bar ---------- */
 
+/* Klammert die Filterelemente, damit sie auf schmalen Bildschirmen gemeinsam
+   ein- und ausgeklappt werden koennen. `display: contents` laesst den Kasten
+   selbst verschwinden - die Elemente bleiben damit direkte Flex-Kinder der
+   Werkzeugleiste und brechen am Rechner um wie zuvor. */
+.toolbar-filter {
+  display: contents;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -842,4 +850,322 @@ textarea {
   background: var(--color-border);
   border: none;
   margin: 4px 0;
+}
+
+/* ============================================================================
+   Mobile Darstellung
+   ============================================================================
+   Das uebrige Stylesheet ist auf feste Breiten gebaut: Sidebar 280 px und
+   Ticketpanel 380 px, beide nicht schrumpfbar. Auf einem 360-px-Bildschirm
+   verbrauchen sie zusammen mehr als der Bildschirm breit ist - der Zeichen-
+   bereich wurde dadurch herausgedraengt und die Ansichten ueberlagerten sich.
+
+   Alle mobilen Regeln stehen bewusst hier gebuendelt und nicht verteilt: so
+   ist an einer Stelle nachvollziehbar, was sich unterhalb des Umbruchpunkts
+   aendert. Der Umbruchpunkt ist 768 px (siehe --breakpoint-mobil).
+   ========================================================================= */
+
+/* ---------- Bedienelemente nur fuer schmale Bildschirme ---------- */
+
+.nur-mobil {
+  display: none;
+}
+
+.ansicht-umschalter {
+  gap: 4px;
+}
+
+/* ---------- Toasts stapeln ---------- */
+/* Die drei Meldungen lagen alle auf derselben festen Position und damit
+   deckungsgleich uebereinander. Sie sitzen jetzt in einem Stapel. */
+
+.toast-stack {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+}
+
+.toast-stack .toast {
+  position: static;
+  transform: none;
+  left: auto;
+  bottom: auto;
+  max-width: 100%;
+  pointer-events: auto;
+}
+
+/* ---------- Touchbedienung ---------- */
+/* Greift nach Eingabeart, nicht nach Breite: auch ein Tablet in Querlage hat
+   keine praezise Maus. 44 px ist die uebliche Mindestgroesse. */
+
+@media (pointer: coarse) {
+  .icon-btn {
+    width: var(--touch-ziel);
+    height: var(--touch-ziel);
+  }
+
+  .btn-sm {
+    min-height: 38px;
+  }
+
+  input,
+  select,
+  textarea {
+    /* Unter 16 px zoomt iOS beim Hineintippen automatisch in die Seite. */
+    font-size: 16px;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .nur-mobil {
+    display: inline-flex;
+  }
+
+  /* ---------- Kopfleiste ---------- */
+  /* Die rechte Gruppe war unschrumpfbar und wurde jenseits des Bildschirmrands
+     abgeschnitten. Jetzt darf sie umbrechen, die Leiste waechst mit. */
+
+  .app-topbar {
+    height: auto;
+    min-height: 52px;
+    padding: 6px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .app-topbar-right {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .app-topbar-brand {
+    font-size: 14px;
+  }
+
+  /* ---------- Sidebar als ausfahrbare Leiste ---------- */
+  /* Statt fest im Fluss zu liegen, schiebt sie sich ueber den Inhalt und ist
+     ueber die Schaltflaeche in der Kopfleiste erreichbar. */
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 45;
+    width: min(300px, 86vw);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-sidebar.ist-offen {
+    transform: none;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: rgba(16, 24, 40, 0.45);
+    border: none;
+    padding: 0;
+  }
+
+  /* ---------- Arbeitsbereich ---------- */
+
+  .app-footer {
+    display: none;
+  }
+
+  .toolbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  /* Die Filter fuellten auf schmalen Bildschirmen bis zu zehn Zeilen und
+     verdraengten die eigentliche Ansicht aus dem Bild. Sie sind jetzt
+     eingeklappt und werden ueber "Filter" geoeffnet. */
+  .toolbar-filter {
+    display: none;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .toolbar-filter.ist-offen {
+    display: flex;
+  }
+
+  .toolbar-filter input,
+  .toolbar-filter select {
+    flex: 1 1 140px;
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .toolbar-spacer {
+    display: none;
+  }
+
+  /* ---------- Plan und Ticketliste umschaltbar ---------- */
+  /* Nebeneinander ist auf einem Smartphone kein Platz; es wird umgeschaltet. */
+
+  .plan-ticket-panel {
+    width: 100%;
+    border-left: none;
+  }
+
+  .plan-workspace.zeigt-plan .plan-ticket-panel {
+    display: none;
+  }
+
+  .plan-workspace.zeigt-tickets .plan-canvas-area {
+    display: none;
+  }
+
+  .plan-canvas-area {
+    padding: 0;
+  }
+
+  /* ---------- Ticketformular als Vollbild-Blatt ---------- */
+  /* Mit height: 100vh lag die Fusszeile mit "Speichern" unter der
+     Adressleiste des Browsers und war nicht erreichbar. */
+
+  .drawer {
+    width: 100vw;
+    height: 100dvh;
+  }
+
+  .drawer-footer {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .tabs {
+    padding: 0 12px;
+    overflow-x: auto;
+  }
+
+  /* ---------- Dialoge ---------- */
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+  }
+
+  /* ---------- Kennzahlen ---------- */
+  /* Vier feste Spalten liessen je Kachel rund 55 px - die Beschriftungen
+     liefen ueber. */
+
+  .dashboard-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  /* ---------- Tabelle als Kartenliste ---------- */
+  /* Neun Spalten sprengen jeden Smartphone-Bildschirm. Jede Zeile wird zur
+     Karte; die Spaltenueberschrift steht als Beschriftung davor (data-label
+     wird in TicketOverview.tsx gesetzt). */
+
+  .data-table {
+    display: block;
+  }
+
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    margin-bottom: 8px;
+    padding: 10px 12px;
+  }
+
+  .data-table td {
+    border: none;
+    padding: 3px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    flex: 0 0 92px;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-text-faint);
+  }
+
+  /* Der Titel steht als Ueberschrift der Karte ohne Beschriftung davor. */
+  .data-table td[data-label='Titel'] {
+    font-weight: 600;
+    font-size: 15px;
+    padding-bottom: 6px;
+  }
+
+  .data-table td[data-label='Titel']::before {
+    display: none;
+  }
+}
+
+/* ---------- Zoom-Leiste des Plan-Viewers ---------- */
+/* Am Rechner oben rechts ueber der Zeichnung. Sie liegt in einem scrollenden
+   Kasten, wandert also beim Schwenken mit - das ist dort gewollt, weil der
+   Plan meist ganz sichtbar ist. */
+
+.pdf-zoom-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  /* Auf schmalen Bildschirmen verdeckte sie oben rechts einen Grossteil der
+     sichtbaren Zeichnung und scrollte beim Schwenken aus dem Bild. Fest am
+     unteren Rand bleibt sie erreichbar und stoert die Sicht nicht. */
+  .pdf-zoom-toolbar {
+    position: fixed;
+    top: auto;
+    right: auto;
+    left: 50%;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 30;
+    box-shadow: var(--shadow-md);
+  }
 }

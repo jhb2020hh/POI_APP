@@ -14,6 +14,11 @@ const EXPORT_VORLAGEN: { wert: ExportTemplate; beschriftung: string }[] = [
 ]
 
 interface SidebarProps {
+  /** Nur auf schmalen Bildschirmen wirksam: Leiste ausgefahren. */
+  istOffen: boolean
+  /** Nach einer Auswahl schliesst sich die Leiste auf schmalen Bildschirmen. */
+  onNavigiert: () => void
+
   projects: Project[]
   selectedProjectId: string | null
   onSelectProject: (id: string) => void
@@ -51,6 +56,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({
+  istOffen,
+  onNavigiert,
   projects,
   selectedProjectId,
   onSelectProject,
@@ -150,6 +157,18 @@ export function Sidebar({
     )
   }
 
+  /**
+   * Nach einer Auswahl schliesst sich die Leiste - auf schmalen Bildschirmen
+   * liegt sie ueber dem Inhalt, den man gerade sehen will. Am Rechner hat der
+   * Aufruf keine Wirkung, weil die Leiste dort fest im Layout steht.
+   */
+  function navigiere<T extends unknown[]>(handler: (...args: T) => void) {
+    return (...args: T) => {
+      handler(...args)
+      onNavigiert()
+    }
+  }
+
   function schliesseExport() {
     setExportMode(false)
     setExportSelection([])
@@ -195,7 +214,7 @@ export function Sidebar({
   }
 
   return (
-    <aside className="app-sidebar">
+    <aside className={`app-sidebar ${istOffen ? 'ist-offen' : ''}`}>
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="sidebar-section-title">Projekte</span>
@@ -272,7 +291,7 @@ export function Sidebar({
                   <button
                     type="button"
                     className={`sidebar-item ${selectedProjectId === p.id ? 'active' : ''}`}
-                    onClick={() => onSelectProject(p.id)}
+                    onClick={navigiere(() => onSelectProject(p.id))}
                   >
                     <span className="sidebar-item-label">{p.name}</span>
                     {p.project_number && <span className="sidebar-item-meta">{p.project_number}</span>}
@@ -341,7 +360,7 @@ export function Sidebar({
               <button
                 type="button"
                 className={`sidebar-item ${dashboardActive ? 'active' : ''}`}
-                onClick={onShowDashboard}
+                onClick={navigiere(onShowDashboard)}
               >
                 <span className="sidebar-item-label">🏠 Projekt-Dashboard</span>
               </button>
@@ -350,7 +369,7 @@ export function Sidebar({
               <button
                 type="button"
                 className={`sidebar-item ${ticketOverviewActive ? 'active' : ''}`}
-                onClick={onShowTicketOverview}
+                onClick={navigiere(onShowTicketOverview)}
               >
                 <span className="sidebar-item-label">📋 Alle Tickets</span>
               </button>
@@ -359,7 +378,7 @@ export function Sidebar({
               <button
                 type="button"
                 className={`sidebar-item ${galleryActive ? 'active' : ''}`}
-                onClick={onShowGallery}
+                onClick={navigiere(onShowGallery)}
               >
                 <span className="sidebar-item-label">🖼 Galerie</span>
               </button>
@@ -373,7 +392,7 @@ export function Sidebar({
               plans={plans}
               folders={planFolders}
               selectedPlanId={selectedPlanId}
-              onSelectPlan={onSelectPlan}
+              onSelectPlan={navigiere(onSelectPlan)}
               exportMode={exportMode}
               exportSelection={exportSelection}
               onToggleExportSelection={toggleExportSelection}
