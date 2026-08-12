@@ -112,7 +112,9 @@ export function PlanFolderTree({
               value={plan.folder_id ?? ''}
               onChange={(e) => handleMovePlan(plan, e.target.value)}
               title="In Ordner verschieben"
-              className="baum-griff" style={{ width: 26, marginRight: 4 }}
+              aria-label={`${plan.name} in einen Ordner verschieben`}
+              className="baum-griff"
+              style={{ width: 26, marginRight: 4 }}
             >
               <option value="">📂</option>
               {folders.map((f) => (

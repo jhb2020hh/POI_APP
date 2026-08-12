@@ -39,14 +39,14 @@ export function AbnahmeprotokollDialog({ ticketCount, onConfirm, onClose }: Abna
           <p className="hinweis" style={{ marginBottom: 12 }}>
             {ticketCount} ausgewählte Ticket{ticketCount === 1 ? '' : 's'} werden in den Bericht aufgenommen.
           </p>
-          <div className="field" style={{ marginBottom: 10 }}>
+          <label className="field" style={{ marginBottom: 10 }}>
             <span className="field-label">Ort</span>
             <input value={ort} onChange={(e) => setOrt(e.target.value)} placeholder="z.B. München" required />
-          </div>
-          <div className="field" style={{ marginBottom: 14 }}>
+          </label>
+          <label className="field" style={{ marginBottom: 14 }}>
             <span className="field-label">Datum</span>
             <input type="date" value={datum} onChange={(e) => setDatum(e.target.value)} required />
-          </div>
+          </label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button type="submit" className="btn btn-primary btn-sm">
               PDF erzeugen

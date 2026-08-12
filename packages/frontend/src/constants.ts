@@ -1,15 +1,9 @@
-export const STATUS_LABELS: Record<string, string> = {
-  open: 'Offen',
-  in_bearbeitung: 'In Bearbeitung',
-  geprueft: 'Geprüft',
-  erledigt: 'Erledigt',
-  abgeschlossen: 'Abgeschlossen',
-}
+// Die Beschriftungen liegen in @poi-app/shared, weil auch das Backend sie
+// braucht: die CSV-Datei gab den Status vorher als Rohwert `open` aus, während
+// die Tabelle daneben „Offen" zeigte. Hier nur noch weitergereicht, damit die
+// bestehenden Importe unverändert bleiben.
+export { PRIORITY_LABELS, STATUS_LABELS } from '@poi-app/shared'
+
+import { STATUS_LABELS } from '@poi-app/shared'
 
 export const STATUS_VALUES = Object.keys(STATUS_LABELS)
-
-export const PRIORITY_LABELS: Record<string, string> = {
-  niedrig: 'Niedrig',
-  mittel: 'Mittel',
-  hoch: 'Hoch',
-}

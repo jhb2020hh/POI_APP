@@ -140,11 +140,11 @@ export function CategoryAdmin({
         {bearbeitet ? `Kategorie bearbeiten: ${category!.name}` : 'Neue Kategorie'}
       </h4>
       <div className="field-row" style={{ marginBottom: 12, alignItems: 'flex-end' }}>
-        <div className="field" style={{ flex: 1 }}>
+        <label className="field" style={{ flex: 1 }}>
           <span className="field-label">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="z.B. Kollision" required />
-        </div>
-        <div className="field">
+        </label>
+        <label className="field">
           <span className="field-label">Kurzcode (für Ticket-IDs)</span>
           <input
             value={shortCode}
@@ -158,11 +158,11 @@ export function CategoryAdmin({
                 : undefined
             }
           />
-        </div>
-        <div className="field">
+        </label>
+        <label className="field">
           <span className="field-label">Farbe</span>
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-        </div>
+        </label>
         <div className="field">
           <span className="field-label">Symbol</span>
           {customGlyph ? (
@@ -170,10 +170,15 @@ export function CategoryAdmin({
               value={glyph}
               onChange={(e) => setGlyph(e.target.value.slice(0, 2))}
               style={{ width: '3rem' }}
+              aria-label="Symbol der Kategorie"
               autoFocus
             />
           ) : (
-            <select value={glyph} onChange={(e) => setGlyph(e.target.value)}>
+            <select
+              value={glyph}
+              onChange={(e) => setGlyph(e.target.value)}
+              aria-label="Symbol der Kategorie"
+            >
               {CATEGORY_ICONS.map((icon) => (
                 <option key={icon} value={icon}>
                   {icon}
@@ -209,6 +214,7 @@ export function CategoryAdmin({
             value={field.key}
             onChange={(e) => applyFieldSuggestion(i, e.target.value)}
             placeholder="Schlüssel"
+            aria-label="Schlüssel des Feldes"
             list="category-field-keys"
             style={{ width: '8rem' }}
           />
@@ -216,10 +222,15 @@ export function CategoryAdmin({
             value={field.label}
             onChange={(e) => updateField(i, { label: e.target.value })}
             placeholder="Anzeigename"
+            aria-label="Anzeigename des Feldes"
             list="category-field-labels"
             style={{ flex: 1 }}
           />
-          <select value={field.type} onChange={(e) => updateField(i, { type: e.target.value as FieldType })}>
+          <select
+            value={field.type}
+            onChange={(e) => updateField(i, { type: e.target.value as FieldType })}
+            aria-label="Art des Feldes"
+          >
             {RENDERABLE_FIELD_TYPES.map((t) => (
               <option key={t} value={t}>
                 {FIELD_TYPE_LABELS_DE[t]}
@@ -238,6 +249,7 @@ export function CategoryAdmin({
                 })
               }
               placeholder="Optionen (Komma-getrennt)"
+              aria-label="Auswahlmöglichkeiten, durch Komma getrennt"
             />
           )}
           <label className="checkbox-label">

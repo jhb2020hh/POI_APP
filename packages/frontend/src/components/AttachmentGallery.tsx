@@ -58,7 +58,7 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
 
   return (
     <div>
-      <div className="field">
+      <label className="field">
         <span className="field-label">Foto/Datei hinzufügen</span>
         <input
           type="file"
@@ -67,7 +67,7 @@ export function AttachmentGallery({ pointId, isOnline }: AttachmentGalleryProps)
           onChange={handleUpload}
           disabled={!isOnline}
         />
-      </div>
+      </label>
       {!isOnline && (
         <p className="hinweis" style={{ marginTop: 6 }}>
           Offline: Anlagen können erst online hochgeladen werden.

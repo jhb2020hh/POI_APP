@@ -3,6 +3,7 @@ import type { Category, Project } from '@poi-app/shared'
 import type { ProjectMember, UserSummary } from '../api/client'
 import { updateProjectDates } from '../api/client'
 import { CategoryAdmin } from './CategoryAdmin'
+import { ExportTemplateAdmin } from './ExportTemplateAdmin'
 import { CategoryBadge } from './ui/Badge'
 
 interface ProjectSettingsPanelProps {
@@ -21,6 +22,8 @@ interface ProjectSettingsPanelProps {
   /** Zuordnen und Entfernen sind serverseitig Admins vorbehalten. */
   canManageMembers: boolean
   onRemoveMember: (userId: string) => Promise<void>
+  /** Damit das Klappmenü im Exportbereich die neue Vorlage kennt. */
+  onExportTemplatesChanged: () => void
 }
 
 export function ProjectSettingsPanel({
@@ -38,8 +41,9 @@ export function ProjectSettingsPanel({
   onDeleteProject,
   canManageMembers,
   onRemoveMember,
+  onExportTemplatesChanged,
 }: ProjectSettingsPanelProps) {
-  const [tab, setTab] = useState<'categories' | 'members' | 'dates'>('categories')
+  const [tab, setTab] = useState<'categories' | 'members' | 'dates' | 'export'>('categories')
   const [newMemberEmail, setNewMemberEmail] = useState('')
   const [removeStatus, setRemoveStatus] = useState('')
   const [bearbeiteteKategorie, setBearbeiteteKategorie] = useState<Category | null>(null)
@@ -141,6 +145,13 @@ export function ProjectSettingsPanel({
           >
             Termine
           </button>
+          <button
+            type="button"
+            className={`tab ${tab === 'export' ? 'active' : ''}`}
+            onClick={() => setTab('export')}
+          >
+            Export
+          </button>
         </div>
         <div className="modal-body">
           {tab === 'categories' && (
@@ -200,6 +211,7 @@ export function ProjectSettingsPanel({
                   value={newMemberEmail}
                   onChange={(e) => setNewMemberEmail(e.target.value)}
                   placeholder="Name oder E-Mail auswählen"
+                  aria-label="Konto zum Zuordnen auswählen"
                   style={{ flex: 1 }}
                 />
                 <datalist id="projekt-mitglied-kandidaten">
@@ -261,17 +273,25 @@ export function ProjectSettingsPanel({
             </div>
           )}
 
+          {tab === 'export' && (
+            <ExportTemplateAdmin
+              projectId={projectId}
+              istAdmin={canManageMembers}
+              onChanged={onExportTemplatesChanged}
+            />
+          )}
+
           {tab === 'dates' && (
             <form onSubmit={handleSaveDates}>
               <div className="field-row" style={{ marginBottom: 12 }}>
-                <div className="field" style={{ flex: 1 }}>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Baubeginn</span>
                   <input type="date" value={baubeginn} onChange={(e) => setBaubeginn(e.target.value)} />
-                </div>
-                <div className="field" style={{ flex: 1 }}>
+                </label>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Fertigstellung</span>
                   <input type="date" value={fertigstellung} onChange={(e) => setFertigstellung(e.target.value)} />
-                </div>
+                </label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button type="submit" className="btn btn-primary btn-sm">

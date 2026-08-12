@@ -142,17 +142,17 @@ export function TicketDrawer({
         <form id="ticket-form" onSubmit={handleSubmit} style={{ display: 'contents' }}>
           {tab === 'details' && (
             <div className="drawer-body">
-              <div className="field">
+              <label className="field">
                 <span className="field-label">Titel</span>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="z.B. Riss in Wand" required autoFocus />
-              </div>
+              </label>
 
-              <div className="field">
+              <label className="field">
                 <span className="field-label">Beschreibung</span>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Details zum Ticket" />
-              </div>
+              </label>
 
-              <div className="field">
+              <label className="field">
                 <span className="field-label">Kategorie</span>
                 <select
                   value={categoryId}
@@ -167,7 +167,7 @@ export function TicketDrawer({
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
               <DynamicFieldForm
                 fields={fields}
@@ -176,7 +176,7 @@ export function TicketDrawer({
               />
 
               {mode === 'edit' && (
-                <div className="field">
+                <label className="field">
                   <span className="field-label">Status</span>
                   <select value={status} onChange={(e) => setStatus(e.target.value)}>
                     {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -185,11 +185,11 @@ export function TicketDrawer({
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
               )}
 
               <div className="field-row">
-                <div className="field" style={{ flex: 1 }}>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Priorität</span>
                   <select value={priority} onChange={(e) => setPriority(e.target.value)}>
                     <option value="">Keine</option>
@@ -197,14 +197,14 @@ export function TicketDrawer({
                     <option value="mittel">Mittel</option>
                     <option value="hoch">Hoch</option>
                   </select>
-                </div>
-                <div className="field" style={{ flex: 1 }}>
+                </label>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Fällig am</span>
                   <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                </div>
+                </label>
               </div>
 
-              <div className="field">
+              <label className="field">
                 <span className="field-label">Zuständig</span>
                 <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
                   <option value="">Nicht zugewiesen</option>
@@ -214,26 +214,26 @@ export function TicketDrawer({
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
               <div className="field-row">
-                <div className="field" style={{ flex: 1 }}>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Gewerk</span>
                   <input value={gewerk} onChange={(e) => setGewerk(e.target.value)} placeholder="z.B. Elektro" />
-                </div>
-                <div className="field" style={{ flex: 1 }}>
+                </label>
+                <label className="field" style={{ flex: 1 }}>
                   <span className="field-label">Raum/Bereich</span>
                   <input value={raumBereich} onChange={(e) => setRaumBereich(e.target.value)} />
-                </div>
+                </label>
               </div>
 
-              <div className="field">
+              <label className="field">
                 <span className="field-label">Bauabschnitt</span>
                 <input value={bauabschnitt} onChange={(e) => setBauabschnitt(e.target.value)} placeholder="z.B. BA1" />
-              </div>
+              </label>
 
               {mode === 'create' && (
-                <div className="field">
+                <label className="field">
                   <span className="field-label">Fotos/Anlagen</span>
                   <input
                     type="file"
@@ -266,7 +266,7 @@ export function TicketDrawer({
                       ))}
                     </div>
                   )}
-                </div>
+                </label>
               )}
             </div>
           )}

@@ -556,14 +556,57 @@ export function listProjectAttachments(projectId: string): Promise<AttachmentWit
   return authFetch(`/api/projects/${projectId}/attachments`).then((res) => json(res));
 }
 
+export interface ExportTemplate {
+  id: string;
+  project_id: string | null;
+  name: string;
+  columns_json: string;
+  created_by: string | null;
+  created_at: string;
+  archived: number;
+}
+
+export function listExportTemplates(projectId: string): Promise<ExportTemplate[]> {
+  return authFetch(`/api/projects/${projectId}/export-templates`).then((res) => json(res));
+}
+
+export function createExportTemplate(
+  projectId: string,
+  input: { name: string; columns: string[]; global?: boolean }
+): Promise<ExportTemplate> {
+  return authFetch(`/api/projects/${projectId}/export-templates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => json(res));
+}
+
+export function updateExportTemplate(
+  templateId: string,
+  input: { name?: string; columns?: string[] }
+): Promise<ExportTemplate> {
+  return authFetch(`/api/export-templates/${templateId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => json(res));
+}
+
+export async function deleteExportTemplate(templateId: string): Promise<void> {
+  const res = await authFetch(`/api/export-templates/${templateId}`, { method: "DELETE" });
+  if (!res.ok) await json(res);
+}
+
 export async function downloadPointsCsv(
   projectId: string,
-  filters: PointFilters & { planId?: string }
+  filters: PointFilters & { planId?: string },
+  templateId?: string
 ): Promise<void> {
   // Dieselbe Umsetzung wie fuer die Ansicht. Hier stand frueher eine eigene
   // Abschrift, in der Gewerk und Kategorie fehlten - die Datei enthielt dadurch
   // stillschweigend mehr Zeilen als die angezeigte Tabelle.
   const params = pointFilterParams(filters);
+  if (templateId) params.set("templateId", templateId);
 
   const res = await authFetch(
     `/api/projects/${projectId}/points/export.csv?${params.toString()}`

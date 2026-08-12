@@ -94,7 +94,7 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {istRegistrierung && (
-            <div className="field">
+            <label className="field">
               <span className="field-label">Name</span>
               <input
                 value={displayName}
@@ -103,9 +103,9 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
                 required
                 autoFocus
               />
-            </div>
+            </label>
           )}
-          <div className="field">
+          <label className="field">
             <span className="field-label">E-Mail</span>
             <input
               type="email"
@@ -115,8 +115,8 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
               required
               autoFocus={!istRegistrierung}
             />
-          </div>
-          <div className="field">
+          </label>
+          <label className="field">
             <span className="field-label">Passwort</span>
             <input
               type="password"
@@ -127,7 +127,7 @@ export function LoginForm({ onLoggedIn }: LoginFormProps) {
               minLength={istRegistrierung ? 8 : undefined}
               autoComplete={istRegistrierung ? 'new-password' : 'current-password'}
             />
-          </div>
+          </label>
           <button type="submit" className="btn btn-primary btn-block" disabled={loading} style={{ marginTop: 8 }}>
             {loading
               ? istRegistrierung

@@ -14,6 +14,7 @@ import { pointRoutes } from "./routes/points.js";
 import { attachmentRoutes } from "./routes/attachments.js";
 import { pointDetailRoutes } from "./routes/pointDetails.js";
 import { exportRoutes } from "./routes/export.js";
+import { exportTemplateRoutes } from "./routes/exportTemplates.js";
 import { statsRoutes } from "./routes/stats.js";
 import { offlineRoutes } from "./routes/offline.js";
 import { syncRoutes } from "./routes/sync.js";
@@ -104,6 +105,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await server.register(attachmentRoutes);
   await server.register(pointDetailRoutes);
   await server.register(exportRoutes);
+  await server.register(exportTemplateRoutes);
   await server.register(statsRoutes);
   await server.register(offlineRoutes);
   await server.register(syncRoutes);

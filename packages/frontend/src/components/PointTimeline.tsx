@@ -117,7 +117,7 @@ export function PointTimeline({ pointId, users }: PointTimelineProps) {
               handleAddComment()
             }
           }}
-          placeholder="Kommentar hinzufügen"
+          placeholder="Kommentar hinzufügen" aria-label="Kommentar hinzufügen"
           style={{ flex: 1 }}
         />
         <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddComment}>

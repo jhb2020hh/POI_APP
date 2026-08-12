@@ -54,13 +54,13 @@ export function LetterheadManagement() {
         Abnahmeprotokoll).
       </p>
       {FIELDS.map(({ key, label }) => (
-        <div className="field" key={key} style={{ marginBottom: 8 }}>
+        <label className="field" key={key} style={{ marginBottom: 8 }}>
           <span className="field-label">{label}</span>
           <input
             value={values[key]}
             onChange={(e) => setValues((prev) => (prev ? { ...prev, [key]: e.target.value } : prev))}
           />
-        </div>
+        </label>
       ))}
       <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button type="submit" className="btn btn-primary btn-sm">

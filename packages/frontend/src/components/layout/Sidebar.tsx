@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react'
 import type { Plan, PlanFolder, Project } from '@poi-app/shared'
-import type { CreateProjectInput } from '../../api/client'
+import type { CreateProjectInput, ExportTemplate } from '../../api/client'
 import { PlanFolderTree } from './PlanFolderTree'
 
 // Sämtliche Ausgaben laufen über diesen einen Bereich. Früher lagen sie an vier
 // verschiedenen Stellen verteilt, teils mit abweichendem Ergebnis.
-type ExportTemplate = 'plaene' | 'abnahmeprotokoll' | 'csv'
+//
+// Die Art der Ausgabe ist eine Zeichenkette statt einer festen Aufzählung, weil
+// zu den drei eingebauten Arten die im Projekt hinterlegten Exportvorlagen
+// hinzukommen. Deren Einträge tragen das Präfix `vorlage:` vor ihrer Kennung.
+const VORLAGE_PRAEFIX = 'vorlage:'
 
-const EXPORT_VORLAGEN: { wert: ExportTemplate; beschriftung: string }[] = [
-  { wert: 'plaene', beschriftung: 'Pläne (PDF)' },
-  { wert: 'abnahmeprotokoll', beschriftung: 'Protokoll' },
-  { wert: 'csv', beschriftung: 'CSV' },
+const AUSGABEARTEN: { wert: string; beschriftung: string }[] = [
+  { wert: 'plaene', beschriftung: 'Pläne (PDF) mit Ticketpunkten' },
+  { wert: 'abnahmeprotokoll', beschriftung: 'Abnahmeprotokoll (PDF)' },
+  { wert: 'csv', beschriftung: 'Ticketliste (CSV, Standardumfang)' },
 ]
 
 interface SidebarProps {
@@ -49,9 +53,15 @@ interface SidebarProps {
   // Alle drei Ausgaben liefern eine Fehlermeldung als Zeichenkette zurueck -
   // leer bedeutet Erfolg. So bleibt die Meldung im Export-Bereich stehen,
   // statt mit ihm zu verschwinden.
-  onExportPlans: (planIds: string[], includeTicketPages: boolean) => Promise<string>
-  onExportCsv: () => Promise<string>
+  onExportPlans: (
+    planIds: string[],
+    includeTicketPages: boolean,
+    ticketTemplateId?: string
+  ) => Promise<string>
+  onExportCsv: (templateId?: string) => Promise<string>
   onExportAbnahmeprotokoll: (planIds: string[]) => Promise<void>
+  /** Im Projekt hinterlegte Exportvorlagen für das Klappmenü. */
+  exportTemplates: ExportTemplate[]
 
   onOpenSettings: () => void
   onMakeOffline: () => void
@@ -84,6 +94,7 @@ export function Sidebar({
   onExportPlans,
   onExportAbnahmeprotokoll,
   onExportCsv,
+  exportTemplates,
   onOpenSettings,
   onMakeOffline,
   offlineStatus,
@@ -104,7 +115,17 @@ export function Sidebar({
   const [exportSelection, setExportSelection] = useState<string[]>([])
   const [exportStatus, setExportStatus] = useState('')
   const [exportIncludeTickets, setExportIncludeTickets] = useState(false)
-  const [exportTemplate, setExportTemplate] = useState<ExportTemplate>('plaene')
+  const [exportArt, setExportArt] = useState<string>('plaene')
+  /** Leer = Standardumfang der Ticketseiten im Plan-PDF. */
+  const [exportTicketVorlage, setExportTicketVorlage] = useState('')
+
+  // Eine gewaehlte Vorlage gibt eine CSV-Datei aus, nur mit anderem Umfang -
+  // deshalb verhaelt sie sich in allem wie die eingebaute CSV-Ausgabe.
+  const gewaehlteVorlage = exportArt.startsWith(VORLAGE_PRAEFIX)
+    ? exportArt.slice(VORLAGE_PRAEFIX.length)
+    : undefined
+  const istCsvAusgabe = exportArt === 'csv' || gewaehlteVorlage !== undefined
+  const brauchtPlanauswahl = !istCsvAusgabe
 
   const [projectsCollapsed, setProjectsCollapsed] = useState(false)
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
@@ -181,10 +202,10 @@ export function Sidebar({
   async function handleExportSelected() {
     // CSV betrifft das ganze Projekt, nicht einzelne Zeichnungen - daher ohne
     // Planauswahl.
-    if (exportTemplate === 'csv') {
+    if (istCsvAusgabe) {
       setExportStatus('Erzeuge CSV…')
       try {
-        const fehler = await onExportCsv()
+        const fehler = await onExportCsv(gewaehlteVorlage)
         setExportStatus(fehler)
         if (!fehler) schliesseExport()
       } catch (err) {
@@ -195,7 +216,7 @@ export function Sidebar({
 
     if (exportSelection.length === 0) return
 
-    if (exportTemplate === 'abnahmeprotokoll') {
+    if (exportArt === 'abnahmeprotokoll') {
       setExportStatus('Lade Tickets…')
       try {
         await onExportAbnahmeprotokoll(exportSelection)
@@ -209,7 +230,11 @@ export function Sidebar({
 
     setExportStatus('Exportiere…')
     try {
-      const summary = await onExportPlans(exportSelection, exportIncludeTickets)
+      const summary = await onExportPlans(
+        exportSelection,
+        exportIncludeTickets,
+        exportTicketVorlage || undefined
+      )
       setExportStatus(summary)
       if (!summary) schliesseExport()
     } catch (err) {
@@ -271,15 +296,16 @@ export function Sidebar({
           <>
             {showCreateProject && (
               <form onSubmit={handleCreateProject} className="sidebar-form">
-                <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Projektname" autoFocus required />
+                <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Projektname" aria-label="Projektname" autoFocus required />
                 <input
                   value={newNumber}
                   onChange={(e) => setNewNumber(e.target.value)}
                   placeholder="Projektnummer (Pflicht, z.B. BV-2026-014)"
+                  aria-label="Projektnummer"
                   required
                 />
-                <input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="Adresse" />
-                <input value={newCustomer} onChange={(e) => setNewCustomer(e.target.value)} placeholder="Kunde" />
+                <input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="Adresse" aria-label="Adresse der Baustelle" />
+                <input value={newCustomer} onChange={(e) => setNewCustomer(e.target.value)} placeholder="Kunde" aria-label="Kunde" />
                 <button type="submit" className="btn btn-primary btn-sm btn-block">
                   Anlegen
                 </button>
@@ -337,7 +363,7 @@ export function Sidebar({
 
           {showUploadPlan && (
             <form onSubmit={handleUploadPlan} className="sidebar-form">
-              <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Name des Plans" autoFocus />
+              <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Name des Plans" aria-label="Name des Plans" autoFocus />
               <input type="file" accept="application/pdf" onChange={(e) => setPlanFile(e.target.files?.[0] ?? null)} />
               <button type="submit" className="btn btn-primary btn-sm btn-block">
                 Hochladen
@@ -406,20 +432,36 @@ export function Sidebar({
 
           {exportMode && (
             <div className="sidebar-bereich">
-              <div className="sidebar-vorlagen">
-                {EXPORT_VORLAGEN.map((vorlage) => (
-                  <button
-                    key={vorlage.wert}
-                    type="button"
-                    className={`btn btn-sm ${exportTemplate === vorlage.wert ? 'btn-primary' : 'btn-ghost-inverse'}`}
-                    onClick={() => {
-                      setExportTemplate(vorlage.wert)
-                      setExportStatus('')
-                    }}
-                  >
-                    {vorlage.beschriftung}
-                  </button>
-                ))}
+              <div className="field" style={{ marginBottom: 8 }}>
+                <label className="sidebar-feldbeschriftung" htmlFor="export-art">
+                  Exportieren als:
+                </label>
+                <select
+                  id="export-art"
+                  value={exportArt}
+                  onChange={(e) => {
+                    setExportArt(e.target.value)
+                    setExportStatus('')
+                  }}
+                >
+                  {AUSGABEARTEN.map((art) => (
+                    <option key={art.wert} value={art.wert}>
+                      {art.beschriftung}
+                    </option>
+                  ))}
+                  {/* Die im Projekt hinterlegten Vorlagen stehen als eigene
+                      Gruppe darunter - sie bestimmen den Umfang, die Ausgabe
+                      selbst bleibt eine CSV-Datei. */}
+                  {exportTemplates.length > 0 && (
+                    <optgroup label="Eigene Vorlagen (CSV)">
+                      {exportTemplates.map((vorlage) => (
+                        <option key={vorlage.id} value={`vorlage:${vorlage.id}`}>
+                          {vorlage.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
               </div>
 
               {/* Alle Ausgaben richten sich nach den Filtern der Werkzeugleiste.
@@ -429,22 +471,51 @@ export function Sidebar({
                 Es werden die Tickets ausgegeben, die durch die aktuell gesetzten Filter sichtbar sind.
               </p>
 
-              {exportTemplate === 'plaene' && (
-                <label className="sidebar-kontrollkaestchen">
-                  <input
-                    type="checkbox"
-                    checked={exportIncludeTickets}
-                    onChange={(e) => setExportIncludeTickets(e.target.checked)}
-                  />
-                  Tickets als Anhang beifügen
-                </label>
+              {exportArt === 'plaene' && (
+                <>
+                  <label className="sidebar-kontrollkaestchen">
+                    <input
+                      type="checkbox"
+                      checked={exportIncludeTickets}
+                      onChange={(e) => setExportIncludeTickets(e.target.checked)}
+                    />
+                    Für jedes Ticket eine eigene Seite anhängen
+                  </label>
+                  {/* Dieselben Vorlagen bestimmen hier, welche Angaben auf einer
+                      Ticketseite stehen - es ist derselbe Satz von Feldern wie
+                      in der CSV-Datei. */}
+                  {exportIncludeTickets && exportTemplates.length > 0 && (
+                    <div className="field" style={{ marginBottom: 6 }}>
+                      <label className="sidebar-feldbeschriftung" htmlFor="export-ticketumfang">
+                        Angaben je Ticketseite:
+                      </label>
+                      <select
+                        id="export-ticketumfang"
+                        value={exportTicketVorlage}
+                        onChange={(e) => setExportTicketVorlage(e.target.value)}
+                      >
+                        <option value="">Standardumfang</option>
+                        {exportTemplates.map((vorlage) => (
+                          <option key={vorlage.id} value={vorlage.id}>
+                            {vorlage.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
               )}
-              {exportTemplate === 'abnahmeprotokoll' && (
+              {exportArt === 'abnahmeprotokoll' && (
                 <p className="sidebar-hinweis">Ort und Datum werden im nächsten Schritt abgefragt.</p>
               )}
-              {exportTemplate === 'csv' && (
+              {istCsvAusgabe && (
                 <p className="sidebar-hinweis">
                   Umfasst alle Zeichnungen des Projekts — eine Auswahl im Baum ist dafür nicht nötig.
+                </p>
+              )}
+              {brauchtPlanauswahl && exportSelection.length === 0 && (
+                <p className="sidebar-hinweis">
+                  Zuerst im Baum die Zeichnungen ankreuzen, die ausgegeben werden sollen.
                 </p>
               )}
 
@@ -452,11 +523,12 @@ export function Sidebar({
                 type="button"
                 className="btn btn-primary btn-sm btn-block"
                 onClick={handleExportSelected}
-                disabled={exportTemplate !== 'csv' && exportSelection.length === 0}
+                disabled={brauchtPlanauswahl && exportSelection.length === 0}
               >
-                {exportTemplate === 'plaene' && `Ausgewählte Pläne exportieren (${exportSelection.length})`}
-                {exportTemplate === 'abnahmeprotokoll' && `Abnahmeprotokoll vorbereiten (${exportSelection.length})`}
-                {exportTemplate === 'csv' && 'CSV herunterladen'}
+                {exportArt === 'plaene' && `Ausgewählte Pläne exportieren (${exportSelection.length})`}
+                {exportArt === 'abnahmeprotokoll' &&
+                  `Abnahmeprotokoll vorbereiten (${exportSelection.length})`}
+                {istCsvAusgabe && 'CSV herunterladen'}
               </button>
               {exportStatus && (
                 <span

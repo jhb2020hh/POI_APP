@@ -152,7 +152,11 @@ export function ProjectGallery({
     <div className="galerie">
       <div className="toolbar">
         <span className="toolbar-title">Galerie ({sichtbar.length})</span>
-        <select value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)}>
+        <select
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
+          aria-label="Nach Ticketart filtern"
+        >
           <option value="">Ticketart: alle</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -160,7 +164,11 @@ export function ProjectGallery({
             </option>
           ))}
         </select>
-        <select value={filterPlanId} onChange={(e) => setFilterPlanId(e.target.value)}>
+        <select
+          value={filterPlanId}
+          onChange={(e) => setFilterPlanId(e.target.value)}
+          aria-label="Nach Zeichnung filtern"
+        >
           <option value="">Zeichnung: alle</option>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
@@ -173,6 +181,7 @@ export function ProjectGallery({
           value={sortSchluessel}
           onChange={(e) => setSortSchluessel(e.target.value)}
           title="Sortieren nach"
+          aria-label="Sortieren nach"
         >
           {SORTIERSCHLUESSEL.map((s) => (
             <option key={s.wert} value={s.wert}>

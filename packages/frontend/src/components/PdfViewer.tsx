@@ -431,6 +431,9 @@ export function PdfViewer({
         return (
           <button
             key={point.id}
+            // Ohne type gilt "submit" - harmlos, solange der Viewer in keinem
+            // Formular steht, aber eine Falle, sobald sich das einmal aendert.
+            type="button"
             data-pin-marker="true"
             onClick={(e) => {
               e.stopPropagation()

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Attachment, Category, Plan, PlanFolder, Point, PointStats, Project } from '@poi-app/shared'
+import { leseSpalten } from '@poi-app/shared'
 import {
   AuthError,
   addProjectMember,
@@ -18,7 +19,10 @@ import {
   listPlanFolders,
   listPlans,
   listVisiblePlanPoints,
+  listExportTemplates,
+  listFieldSuggestions,
   listProjectMembers,
+  type ExportTemplate,
   listProjectPoints,
   listProjects,
   listProjectStats,
@@ -81,6 +85,7 @@ function App() {
   const [overviewPoints, setOverviewPoints] = useState<PointWithPlan[]>([])
   const [users, setUsers] = useState<UserSummary[]>([])
   const [members, setMembers] = useState<ProjectMember[]>([])
+  const [exportTemplates, setExportTemplates] = useState<ExportTemplate[]>([])
   const [categories, setCategories] = useState<Category[]>([])
 
   const [createProjectStatus, setCreateProjectStatus] = useState('')
@@ -207,6 +212,7 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated || !selectedProjectId) {
       setMembers([])
+      setExportTemplates([])
       return
     }
     listProjectMembers(selectedProjectId)
@@ -214,6 +220,8 @@ function App() {
       .catch((err) => {
         if (!handleAuthError(err)) throw err
       })
+    refreshExportTemplates(selectedProjectId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProjectId, isAuthenticated])
 
   function refreshCategories(projectId: string) {
@@ -483,7 +491,11 @@ function App() {
     return listVisiblePlanPoints(selectedProjectId, planId, currentFilters)
   }
 
-  async function handleExportPlans(planIds: string[], includeTicketPages: boolean): Promise<string> {
+  async function handleExportPlans(
+    planIds: string[],
+    includeTicketPages: boolean,
+    ticketTemplateId?: string
+  ): Promise<string> {
     const entries = []
     for (const planId of planIds) {
       const plan = plans.find((p) => p.id === planId)
@@ -498,17 +510,42 @@ function App() {
       }
       entries.push({ plan, points: planPoints, attachmentsByPointId })
     }
-    return exportPlansToPdf(entries, { includeTicketPages, categories, users })
+    const vorlage = ticketTemplateId
+      ? exportTemplates.find((v) => v.id === ticketTemplateId)
+      : undefined
+    // Die Anzeigenamen der frei definierten Felder kommen aus derselben Quelle
+    // wie im Vorlagen-Editor.
+    const feldLabels: Record<string, string> = {}
+    if (vorlage) {
+      for (const feld of await listFieldSuggestions().catch(() => [])) {
+        feldLabels[feld.key] = feld.label
+      }
+    }
+
+    return exportPlansToPdf(entries, {
+      includeTicketPages,
+      categories,
+      users,
+      ticketSpalten: vorlage ? leseSpalten(vorlage.columns_json) : undefined,
+      feldLabels,
+      planNameById: Object.fromEntries(plans.map((p) => [p.id, p.name])),
+    })
   }
 
-  async function handleExportCsv(): Promise<string> {
+  async function handleExportCsv(templateId?: string): Promise<string> {
     if (!selectedProjectId) return 'Kein Projekt ausgewählt.'
     try {
-      await downloadPointsCsv(selectedProjectId, currentFilters)
+      await downloadPointsCsv(selectedProjectId, currentFilters, templateId)
       return ''
     } catch (err) {
       return `Fehler: ${err instanceof Error ? err.message : err}`
     }
+  }
+
+  function refreshExportTemplates(projectId: string) {
+    listExportTemplates(projectId)
+      .then(setExportTemplates)
+      .catch(() => setExportTemplates([]))
   }
 
   function handleCanvasClick(relX: number, relY: number) {
@@ -676,6 +713,7 @@ function App() {
           onExportPlans={handleExportPlans}
           onExportAbnahmeprotokoll={handleExportAbnahmeprotokoll}
           onExportCsv={handleExportCsv}
+          exportTemplates={exportTemplates}
           onOpenSettings={() => setSettingsOpen(true)}
           onMakeOffline={handleMakeOffline}
           offlineStatus={offlineStatus}
@@ -703,11 +741,28 @@ function App() {
                   value={filterBauabschnitt}
                   onChange={(e) => setFilterBauabschnitt(e.target.value)}
                   placeholder="Bauabschnitt"
+                  aria-label="Nach Bauabschnitt filtern"
                   style={{ width: 140 }}
                 />
-                <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} title="von" />
-                <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} title="bis" />
-                <select value={filterPlanId} onChange={(e) => setFilterPlanId(e.target.value)}>
+                <input
+                  type="date"
+                  value={filterFrom}
+                  onChange={(e) => setFilterFrom(e.target.value)}
+                  title="Erstellt ab"
+                  aria-label="Erstellt ab"
+                />
+                <input
+                  type="date"
+                  value={filterTo}
+                  onChange={(e) => setFilterTo(e.target.value)}
+                  title="Erstellt bis"
+                  aria-label="Erstellt bis"
+                />
+                <select
+                  value={filterPlanId}
+                  onChange={(e) => setFilterPlanId(e.target.value)}
+                  aria-label="Nach Zeichnung filtern"
+                >
                   <option value="">Zeichnung: alle</option>
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -715,7 +770,11 @@ function App() {
                     </option>
                   ))}
                 </select>
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  aria-label="Nach Status filtern"
+                >
                   <option value="">Status: alle</option>
                   {Object.entries(STATUS_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -723,7 +782,11 @@ function App() {
                     </option>
                   ))}
                 </select>
-                <select value={filterAssignedTo} onChange={(e) => setFilterAssignedTo(e.target.value)}>
+                <select
+                  value={filterAssignedTo}
+                  onChange={(e) => setFilterAssignedTo(e.target.value)}
+                  aria-label="Nach Zuständigem filtern"
+                >
                   <option value="">Zuständig: alle</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -735,9 +798,14 @@ function App() {
                   value={filterGewerk}
                   onChange={(e) => setFilterGewerk(e.target.value)}
                   placeholder="Gewerk"
+                  aria-label="Nach Gewerk filtern"
                   style={{ width: 120 }}
                 />
-                <select value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)}>
+                <select
+                  value={filterCategoryId}
+                  onChange={(e) => setFilterCategoryId(e.target.value)}
+                  aria-label="Nach Kategorie filtern"
+                >
                   <option value="">Kategorie: alle</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -838,11 +906,28 @@ function App() {
                   value={filterBauabschnitt}
                   onChange={(e) => setFilterBauabschnitt(e.target.value)}
                   placeholder="Bauabschnitt"
+                  aria-label="Nach Bauabschnitt filtern"
                   style={{ width: 140 }}
                 />
-                <input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} title="von" />
-                <input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} title="bis" />
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                <input
+                  type="date"
+                  value={filterFrom}
+                  onChange={(e) => setFilterFrom(e.target.value)}
+                  title="Erstellt ab"
+                  aria-label="Erstellt ab"
+                />
+                <input
+                  type="date"
+                  value={filterTo}
+                  onChange={(e) => setFilterTo(e.target.value)}
+                  title="Erstellt bis"
+                  aria-label="Erstellt bis"
+                />
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  aria-label="Nach Status filtern"
+                >
                   <option value="">Status: alle</option>
                   {Object.entries(STATUS_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -850,7 +935,11 @@ function App() {
                     </option>
                   ))}
                 </select>
-                <select value={filterAssignedTo} onChange={(e) => setFilterAssignedTo(e.target.value)}>
+                <select
+                  value={filterAssignedTo}
+                  onChange={(e) => setFilterAssignedTo(e.target.value)}
+                  aria-label="Nach Zuständigem filtern"
+                >
                   <option value="">Zuständig: alle</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -950,6 +1039,7 @@ function App() {
           onClose={() => setSettingsOpen(false)}
           canDelete={currentUser?.role === 'admin'}
           canManageMembers={currentUser?.role === 'admin'}
+          onExportTemplatesChanged={() => refreshExportTemplates(selectedProjectId)}
           onRemoveMember={handleRemoveMember}
           onDeleteProject={async () => {
             await deleteProject(selectedProjectId)
@@ -988,7 +1078,13 @@ function App() {
           {syncStatus && (
             <div className="toast">
               {syncStatus}
-              <button type="button" className="icon-btn" onClick={() => setSyncStatus('')}>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setSyncStatus('')}
+                aria-label="Meldung schließen"
+                title="Meldung schließen"
+              >
                 ✕
               </button>
             </div>
@@ -996,7 +1092,13 @@ function App() {
           {conflictWarning && (
             <div className="toast">
               {conflictWarning}
-              <button type="button" className="icon-btn" onClick={() => setConflictWarning(null)}>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setConflictWarning(null)}
+                aria-label="Meldung schließen"
+                title="Meldung schließen"
+              >
                 ✕
               </button>
             </div>
@@ -1004,7 +1106,13 @@ function App() {
           {actionError && (
             <div className="toast">
               {actionError}
-              <button type="button" className="icon-btn" onClick={() => setActionError(null)}>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setActionError(null)}
+                aria-label="Meldung schließen"
+                title="Meldung schließen"
+              >
                 ✕
               </button>
             </div>

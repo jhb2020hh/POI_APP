@@ -1,8 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { Attachment, Category, Plan, Point } from '@poi-app/shared'
+import {
+  FESTE_EXPORT_SPALTEN,
+  exportWert,
+  istKategoriefeld,
+  kategoriefeldSchluessel,
+} from '@poi-app/shared'
 import { planFileUrl, type UserSummary } from '../api/client'
-import { STATUS_LABELS } from '../constants'
 import { authHeaders, downloadPdfBytes, drawAttachmentPhotoGrid, sanitizeForFont, wrapText } from './pdfImageEmbed'
 
 const FALLBACK_COLOR_HEX = '#888888'
@@ -66,6 +71,39 @@ export interface PlanPdfExportOptions {
   includeTicketPages: boolean
   categories: Category[]
   users: UserSummary[]
+  /** Reihenfolge der Angaben auf einer Ticketseite; leer = bisheriger Satz. */
+  ticketSpalten?: string[]
+  /** Anzeigenamen der frei definierten Kategoriefelder. */
+  feldLabels?: Record<string, string>
+  planNameById?: Record<string, string>
+}
+
+/**
+ * Der bisherige feste Satz auf einer Ticketseite - er gilt weiter, solange
+ * keine Exportvorlage gewählt ist. Bewusst nicht STANDARD_EXPORT_SPALTEN: eine
+ * Ticketseite trägt Titel und Beschreibung bereits an anderer Stelle, sie
+ * gehören deshalb nicht in die Feldliste.
+ */
+const STANDARD_TICKETSEITE = [
+  'ticket_number',
+  'status',
+  'category',
+  'priority',
+  'assigned_to',
+  'due_date',
+  'gewerk',
+  'raum_bereich',
+]
+
+/** Beschriftung einer Spalte; Kategoriefelder tragen ihren eigenen Namen. */
+function spaltenBeschriftung(key: string, feldLabels: Record<string, string>): string {
+  const fest = FESTE_EXPORT_SPALTEN.find((s) => s.key === key)
+  if (fest) return fest.label
+  if (istKategoriefeld(key)) {
+    const feldKey = kategoriefeldSchluessel(key)
+    return feldLabels[feldKey] ?? feldKey
+  }
+  return key
 }
 
 // Gibt bei vollstaendigem Erfolg einen leeren String zurueck, sonst eine
@@ -77,6 +115,17 @@ export async function exportPlansToPdf(entries: PlanExportEntry[], options: Plan
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const categoryById = new Map(options.categories.map((c) => [c.id, c]))
   const userById = new Map(options.users.map((u) => [u.id, u]))
+
+  const spaltenFuerTicketseite =
+    options.ticketSpalten && options.ticketSpalten.length > 0
+      ? options.ticketSpalten
+      : STANDARD_TICKETSEITE
+  const feldLabels = options.feldLabels ?? {}
+  const wertKontext = {
+    kategorieName: (id: string | null) => (id ? categoryById.get(id)?.name : undefined),
+    personName: (id: string | null) => (id ? userById.get(id)?.display_name : undefined),
+    planName: (id: string) => options.planNameById?.[id],
+  }
 
   const failures: { planName: string; reason: string }[] = []
   const succeededPlanNames: string[] = []
@@ -138,17 +187,12 @@ export async function exportPlansToPdf(entries: PlanExportEntry[], options: Plan
         })
         cursorY -= 28
 
-        const category = point.category_id ? categoryById.get(point.category_id) : undefined
-        const fields: [string, string][] = [
-          ['Ticket-Nr.', point.ticket_number ?? 'wird vergeben'],
-          ['Status', STATUS_LABELS[point.status] ?? point.status],
-          ['Kategorie', category?.name ?? '-'],
-          ['Priorität', point.priority ?? '-'],
-          ['Zuständig', point.assigned_to ? userById.get(point.assigned_to)?.display_name ?? '-' : '-'],
-          ['Fällig am', point.due_date ?? '-'],
-          ['Gewerk', point.gewerk ?? '-'],
-          ['Raum/Bereich', point.raum_bereich ?? '-'],
-        ]
+        // Dieselben Spalten wie in der CSV-Datei - eine gewaehlte Exportvorlage
+        // bestimmt beides. Ohne Vorlage bleibt es beim bisherigen Satz.
+        const fields: [string, string][] = spaltenFuerTicketseite.map((key) => [
+          spaltenBeschriftung(key, feldLabels),
+          exportWert(point, key, wertKontext) || '-',
+        ])
         for (const [label, value] of fields) {
           currentPage.drawText(sanitizeForFont(font, `${label}: ${value}`), {
             x: MARGIN,

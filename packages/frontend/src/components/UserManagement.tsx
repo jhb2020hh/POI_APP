@@ -148,11 +148,11 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
       <form onSubmit={handleSubmit} className="card" style={{ padding: 14, marginBottom: 16 }}>
         <h4 style={{ marginBottom: 10 }}>Neuen Nutzer anlegen</h4>
         <div className="field-row" style={{ marginBottom: 10 }}>
-          <div className="field" style={{ flex: 1 }}>
+          <label className="field" style={{ flex: 1 }}>
             <span className="field-label">Name</span>
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Max Mustermann" required />
-          </div>
-          <div className="field" style={{ flex: 1 }}>
+          </label>
+          <label className="field" style={{ flex: 1 }}>
             <span className="field-label">E-Mail</span>
             <input
               type="email"
@@ -161,10 +161,10 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
               placeholder="max@firma.de"
               required
             />
-          </div>
+          </label>
         </div>
         <div className="field-row" style={{ marginBottom: 10 }}>
-          <div className="field" style={{ flex: 1 }}>
+          <label className="field" style={{ flex: 1 }}>
             <span className="field-label">Passwort</span>
             <input
               type="password"
@@ -173,8 +173,8 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
               placeholder="Mindestens 6 Zeichen"
               required
             />
-          </div>
-          <div className="field" style={{ flex: 1 }}>
+          </label>
+          <label className="field" style={{ flex: 1 }}>
             <span className="field-label">Rolle</span>
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLE_OPTIONS.map((r) => (
@@ -183,7 +183,7 @@ export function UserManagement({ users, onUserCreated }: UserManagementProps) {
                 </option>
               ))}
             </select>
-          </div>
+          </label>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button type="submit" className="btn btn-primary btn-sm">
