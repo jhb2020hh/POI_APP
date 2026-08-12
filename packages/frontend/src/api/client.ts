@@ -536,7 +536,21 @@ export function attachmentFileUrl(attachmentId: string): string {
   return `/api/attachments/${attachmentId}/file`;
 }
 
-export type AttachmentWithPoint = Attachment & { plan_id: string; point_title: string; category_id: string | null };
+/**
+ * Anhang samt der Angaben des Tickets, an dem er haengt - die Galerie zeigt
+ * und sortiert danach. Muss zu AttachmentWithPoint in
+ * packages/backend/src/repositories/attachmentRepository.ts passen.
+ */
+export type AttachmentWithPoint = Attachment & {
+  plan_id: string;
+  plan_name: string | null;
+  point_title: string;
+  category_id: string | null;
+  ticket_number: string | null;
+  point_status: string;
+  assigned_to: string | null;
+  gewerk: string | null;
+};
 
 export function listProjectAttachments(projectId: string): Promise<AttachmentWithPoint[]> {
   return authFetch(`/api/projects/${projectId}/attachments`).then((res) => json(res));

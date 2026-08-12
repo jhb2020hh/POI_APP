@@ -12,6 +12,7 @@
   "dependencies": {
     "@poi-app/shared": "*",
     "@supabase/supabase-js": "^2.58.0",
+    "exifr": "^7.1.3",
     "idb": "^8.0.3",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.1.200",

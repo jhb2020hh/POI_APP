@@ -790,6 +790,7 @@ function App() {
               projectId={selectedProjectId}
               categories={categories}
               plans={plans}
+              users={users}
               onSelectAttachment={handleGallerySelect}
             />
           )}

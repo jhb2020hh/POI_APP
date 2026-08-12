@@ -52,10 +52,22 @@ export async function listAttachmentsForPoint(pointId: string): Promise<Attachme
     .all<Attachment>(pointId);
 }
 
+/**
+ * Anhang samt der Angaben des Tickets, an dem er haengt.
+ *
+ * Die Galerie zeigt sie im Infofenster und sortiert danach. Sie hier
+ * mitzuliefern spart je Bild eine eigene Abfrage - bei einigen hundert Fotos
+ * waeren das einige hundert Anfragen.
+ */
 export interface AttachmentWithPoint extends Attachment {
   plan_id: string;
+  plan_name: string | null;
   point_title: string;
   category_id: string | null;
+  ticket_number: string | null;
+  point_status: string;
+  assigned_to: string | null;
+  gewerk: string | null;
 }
 
 export async function listAttachmentsByProject(
@@ -70,7 +82,15 @@ export async function listAttachmentsByProject(
   }
   return db
     .prepare(
-      `SELECT point_attachments.*, points.plan_id AS plan_id, points.title AS point_title, points.category_id AS category_id
+      `SELECT point_attachments.*,
+              points.plan_id       AS plan_id,
+              plans.name           AS plan_name,
+              points.title         AS point_title,
+              points.category_id   AS category_id,
+              points.ticket_number AS ticket_number,
+              points.status        AS point_status,
+              points.assigned_to   AS assigned_to,
+              points.gewerk        AS gewerk
        FROM point_attachments
        JOIN points ON points.id = point_attachments.point_id
        JOIN plans ON plans.id = points.plan_id

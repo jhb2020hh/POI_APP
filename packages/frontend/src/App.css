@@ -977,6 +977,137 @@ textarea {
   line-height: 1.5;
 }
 
+/* ---------- Galerie ---------- */
+
+.galerie {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.galerie-hinweis {
+  margin-bottom: 10px;
+}
+
+.galerie-raster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Die Kachel traegt den Info-Knopf in ihrer Ecke, deshalb position: relative. */
+.galerie-kachel {
+  position: relative;
+  margin: 0;
+  width: 140px;
+}
+
+.galerie-bildknopf {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.galerie-bildknopf img {
+  display: block;
+  width: 138px;
+  height: 138px;
+  object-fit: cover;
+}
+
+/* Dauerhaft sichtbar statt nur beim Ueberfahren: am Touchgeraet gibt es kein
+   Ueberfahren, und der Rechtsklick fehlt dort ebenfalls. */
+.galerie-infoknopf {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(16, 24, 40, 0.65);
+  color: #fff;
+  font-size: var(--schrift-mini);
+  font-weight: 700;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.galerie-infoknopf:hover {
+  background: rgba(16, 24, 40, 0.85);
+}
+
+.galerie-bildunterschrift {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.galerie-datei {
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+@media (pointer: coarse) {
+  /* Ein 24-px-Ziel trifft man mit dem Finger nicht zuverlaessig. */
+  .galerie-infoknopf {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* ---------- Infofenster zum Foto ---------- */
+
+.bildinfo-vorschau {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.bildinfo-liste {
+  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bildinfo-zeile {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bildinfo-zeile dt {
+  flex: 0 0 42%;
+  font-size: var(--schrift-mini);
+  color: var(--color-text-muted);
+}
+
+.bildinfo-zeile dd {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--schrift-klein);
+  overflow-wrap: anywhere;
+}
+
+.bildinfo-aktionen {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* ---------- Tabs ---------- */
 
 .tabs {
