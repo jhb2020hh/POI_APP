@@ -31,6 +31,23 @@ export interface Point {
 }
 
 /**
+ * Dehnt ein reines Datum auf das Ende dieses Tages aus.
+ *
+ * Die Oberflaeche schickt fuer "bis" ein Datumsfeld, also `2026-08-10`.
+ * `created_at` ist dagegen ein voller Zeitstempel (`2026-08-10T09:15:00.000Z`),
+ * und verglichen wird als Zeichenkette. `created_at <= '2026-08-10'` schloss
+ * damit *alles* aus, was an diesem Tag entstanden ist - "bis 10.08." verlor den
+ * 10. August vollstaendig.
+ *
+ * Bewusst hier und nicht im Client: der Vergleich findet hier statt, also
+ * gehoert die Regel hierher. Ein Aufrufer, der bereits einen vollen Zeitstempel
+ * schickt, bleibt unberuehrt.
+ */
+function bisTagesende(wert: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(wert) ? `${wert}T23:59:59.999Z` : wert;
+}
+
+/**
  * Vergibt die naechste laufende Nummer je Projekt+Ticketart.
  *
  * Frueher waren das zwei Statements, was nur deshalb sicher war, weil node:sqlite
@@ -169,7 +186,7 @@ export async function listPointsByPlan(
   }
   if (filters?.to) {
     conditions.push("created_at <= ?");
-    params.push(filters.to);
+    params.push(bisTagesende(filters.to));
   }
   if (filters?.status) {
     conditions.push("status = ?");
@@ -217,7 +234,7 @@ export async function listPointsByProject(
   }
   if (filters?.to) {
     conditions.push("points.created_at <= ?");
-    params.push(filters.to);
+    params.push(bisTagesende(filters.to));
   }
   if (filters?.status) {
     conditions.push("points.status = ?");

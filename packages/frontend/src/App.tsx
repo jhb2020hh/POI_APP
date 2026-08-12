@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Attachment, Category, Plan, PlanFolder, Point, PointStats, Project } from '@poi-app/shared'
 import {
   AuthError,
@@ -17,7 +17,7 @@ import {
   listGlobalCategories,
   listPlanFolders,
   listPlans,
-  listPoints,
+  listVisiblePlanPoints,
   listProjectMembers,
   listProjectPoints,
   listProjects,
@@ -253,16 +253,37 @@ function App() {
       })
   }
 
-  const currentFilters: PointFilters = {
-    planId: filterPlanId || undefined,
-    bauabschnitt: filterBauabschnitt || undefined,
-    from: filterFrom || undefined,
-    to: filterTo || undefined,
-    status: filterStatus || undefined,
-    assignedTo: filterAssignedTo || undefined,
-    gewerk: filterGewerk || undefined,
-    categoryId: filterCategoryId || undefined,
-  }
+  /**
+   * Die gesetzten Filter als ein Wert.
+   *
+   * Bewusst gebuendelt und gemerkt: solange die Effekte unten jeden Filter
+   * einzeln in ihrer Abhaengigkeitsliste auffuehrten, fehlten dort drei davon -
+   * die Pins im Planfenster wurden bei einer Aenderung von Gewerk oder
+   * Kategorie schlicht nicht neu geladen. Mit einem einzigen Wert kann das
+   * nicht mehr passieren.
+   */
+  const currentFilters = useMemo<PointFilters>(
+    () => ({
+      planId: filterPlanId || undefined,
+      bauabschnitt: filterBauabschnitt || undefined,
+      from: filterFrom || undefined,
+      to: filterTo || undefined,
+      status: filterStatus || undefined,
+      assignedTo: filterAssignedTo || undefined,
+      gewerk: filterGewerk || undefined,
+      categoryId: filterCategoryId || undefined,
+    }),
+    [
+      filterPlanId,
+      filterBauabschnitt,
+      filterFrom,
+      filterTo,
+      filterStatus,
+      filterAssignedTo,
+      filterGewerk,
+      filterCategoryId,
+    ]
+  )
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -273,10 +294,13 @@ function App() {
     }
     setDrawer(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlanId, isAuthenticated, filterBauabschnitt, filterFrom, filterTo, filterStatus, filterAssignedTo])
+  }, [selectedPlanId, isAuthenticated, currentFilters])
 
   function refreshPoints(planId: string) {
-    listPoints(planId, currentFilters)
+    // Dieselbe Funktion, die auch die Ausgaben verwenden - siehe
+    // sichtbareTicketsDesPlans. Dass Ansicht und PDF dieselbe Menge zeigen,
+    // ist damit nicht mehr Absprache, sondern Bauart.
+    sichtbareTicketsDesPlans(planId)
       .then(setPoints)
       .catch((err) => {
         if (!handleAuthError(err)) throw err
@@ -294,19 +318,7 @@ function App() {
         if (!handleAuthError(err)) throw err
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    selectedProjectId,
-    showTicketOverview,
-    isAuthenticated,
-    filterPlanId,
-    filterBauabschnitt,
-    filterFrom,
-    filterTo,
-    filterStatus,
-    filterAssignedTo,
-    filterGewerk,
-    filterCategoryId,
-  ])
+  }, [selectedProjectId, showTicketOverview, isAuthenticated, currentFilters])
 
   const [pendingPointId, setPendingPointId] = useState<string | null>(null)
   const [reportSelection, setReportSelection] = useState<string[]>([])
@@ -343,7 +355,7 @@ function App() {
     const allPoints: PointWithPlan[] = []
     for (const planId of planIds) {
       const plan = plans.find((p) => p.id === planId)
-      const planPoints = await loadFilteredPlanPoints(planId)
+      const planPoints = await sichtbareTicketsDesPlans(planId)
       allPoints.push(...planPoints.map((p) => ({ ...p, plan_name: p.plan_name ?? plan?.name ?? null })))
     }
     if (allPoints.length === 0) {
@@ -447,16 +459,16 @@ function App() {
   }
 
   /**
-   * Laedt die Tickets eines Plans so, wie sie gerade gefiltert angezeigt werden.
+   * Die Tickets eines Plans, so wie sie unter den aktuellen Filtern sichtbar
+   * sind - fuer die Anzeige *und* fuer jede Ausgabe.
    *
-   * Bewusst ueber listProjectPoints und nicht ueber listPoints: nur diese
-   * Variante wertet auch Gewerk und Kategorie aus. listPoints wuerde beide
-   * stillschweigend verwerfen, und der Export enthielte mehr Tickets als die
-   * Ansicht zeigt.
+   * Diese eine Funktion zu haben ist der Kern der Sache: solange Ansicht und
+   * Export ueber verschiedene Wege luden, konnten sie verschiedene Mengen
+   * zeigen, und genau das taten sie auch.
    */
-  async function loadFilteredPlanPoints(planId: string): Promise<PointWithPlan[]> {
+  async function sichtbareTicketsDesPlans(planId: string): Promise<PointWithPlan[]> {
     if (!selectedProjectId) return []
-    return listProjectPoints(selectedProjectId, { ...currentFilters, planId })
+    return listVisiblePlanPoints(selectedProjectId, planId, currentFilters)
   }
 
   async function handleExportPlans(planIds: string[], includeTicketPages: boolean): Promise<string> {
@@ -464,7 +476,7 @@ function App() {
     for (const planId of planIds) {
       const plan = plans.find((p) => p.id === planId)
       if (!plan) continue
-      const planPoints = await loadFilteredPlanPoints(planId)
+      const planPoints = await sichtbareTicketsDesPlans(planId)
       let attachmentsByPointId: Record<string, Attachment[]> | undefined
       if (includeTicketPages) {
         attachmentsByPointId = {}

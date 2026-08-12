@@ -538,18 +538,10 @@ export async function downloadPointsCsv(
   projectId: string,
   filters: PointFilters & { planId?: string }
 ): Promise<void> {
-  const params = new URLSearchParams();
-  if (filters.planId) params.set("planId", filters.planId);
-  if (filters.bauabschnitt) params.set("bauabschnitt", filters.bauabschnitt);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  if (filters.status) params.set("status", filters.status);
-  if (filters.assignedTo) params.set("assignedTo", filters.assignedTo);
-  // Gewerk und Kategorie wurden hier bisher nicht mitgeschickt, obwohl die
-  // Oberflaeche danach filtert und das Backend sie kennt. Die Datei enthielt
-  // dadurch stillschweigend mehr Zeilen als die angezeigte Tabelle.
-  if (filters.gewerk) params.set("gewerk", filters.gewerk);
-  if (filters.categoryId) params.set("categoryId", filters.categoryId);
+  // Dieselbe Umsetzung wie fuer die Ansicht. Hier stand frueher eine eigene
+  // Abschrift, in der Gewerk und Kategorie fehlten - die Datei enthielt dadurch
+  // stillschweigend mehr Zeilen als die angezeigte Tabelle.
+  const params = pointFilterParams(filters);
 
   const res = await authFetch(
     `/api/projects/${projectId}/points/export.csv?${params.toString()}`
@@ -648,30 +640,90 @@ export interface PointFilters {
   categoryId?: string;
 }
 
-export function listPoints(planId: string, filters?: PointFilters): Promise<Point[]> {
-  if (!navigator.onLine) return getOfflinePointsByPlan(planId);
-  const params = new URLSearchParams({ planId });
-  if (filters?.bauabschnitt) params.set("bauabschnitt", filters.bauabschnitt);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.assignedTo) params.set("assignedTo", filters.assignedTo);
-  return authFetch(`/api/points?${params.toString()}`).then((res) => json(res));
-}
-
 export type PointWithPlan = Point & { plan_name: string | null };
 
-export function listProjectPoints(projectId: string, filters?: PointFilters): Promise<PointWithPlan[]> {
+/**
+ * Setzt die Filter in Abfrageparameter um - an genau einer Stelle.
+ *
+ * Vorher baute jede Abfrage ihre Parameter selbst zusammen, und dabei fehlten
+ * in der Variante fuer das Planfenster ausgerechnet `gewerk` und `categoryId`.
+ * Mit gesetztem Gewerkfilter zeigte die Ansicht deshalb mehr Tickets, als der
+ * Export danach ausgab. Ein neuer Filter wird jetzt hier eingetragen und wirkt
+ * damit ueberall.
+ */
+function pointFilterParams(filters?: PointFilters): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters?.planId) params.set("planId", filters.planId);
-  if (filters?.bauabschnitt) params.set("bauabschnitt", filters.bauabschnitt);
-  if (filters?.from) params.set("from", filters.from);
-  if (filters?.to) params.set("to", filters.to);
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.assignedTo) params.set("assignedTo", filters.assignedTo);
-  if (filters?.gewerk) params.set("gewerk", filters.gewerk);
-  if (filters?.categoryId) params.set("categoryId", filters.categoryId);
-  return authFetch(`/api/projects/${projectId}/points?${params.toString()}`).then((res) => json(res));
+  if (!filters) return params;
+  if (filters.planId) params.set("planId", filters.planId);
+  if (filters.bauabschnitt) params.set("bauabschnitt", filters.bauabschnitt);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.assignedTo) params.set("assignedTo", filters.assignedTo);
+  if (filters.gewerk) params.set("gewerk", filters.gewerk);
+  if (filters.categoryId) params.set("categoryId", filters.categoryId);
+  return params;
+}
+
+/**
+ * Dieselbe Auswahl wie auf dem Server, nur lokal - fuer den Offline-Betrieb.
+ *
+ * Muss zu listPointsByProject in packages/backend/src/repositories/pointRepository.ts
+ * passen. Bisher lieferte der Offline-Zweig die Tickets voellig ungefiltert
+ * zurueck: sobald die Verbindung fehlte, ignorierte die Ansicht jeden Filter.
+ */
+function passtZuFiltern(point: Point, filters?: PointFilters): boolean {
+  if (!filters) return true;
+  if (filters.bauabschnitt && point.bauabschnitt !== filters.bauabschnitt) return false;
+  if (filters.status && point.status !== filters.status) return false;
+  if (filters.assignedTo && point.assigned_to !== filters.assignedTo) return false;
+  if (filters.gewerk && point.gewerk !== filters.gewerk) return false;
+  if (filters.categoryId && point.category_id !== filters.categoryId) return false;
+  // Wie serverseitig ein Zeichenkettenvergleich auf created_at; `to` deckt den
+  // ganzen Tag ab (siehe tagesEnde).
+  if (filters.from && point.created_at < filters.from) return false;
+  if (filters.to && point.created_at > tagesEnde(filters.to)) return false;
+  return true;
+}
+
+/**
+ * Macht aus einem reinen Datum das Ende dieses Tages - nur fuer den
+ * Offline-Zweig.
+ *
+ * Online erledigt das der Server (bisTagesende in pointRepository.ts), weil der
+ * Vergleich dort stattfindet. Ohne Verbindung wird hier verglichen, also wird
+ * die Regel hier noch einmal gebraucht.
+ */
+function tagesEnde(datum: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(datum) ? `${datum}T23:59:59.999Z` : datum;
+}
+
+/**
+ * Die Tickets eines Plans, so wie sie unter den aktuellen Filtern sichtbar sind.
+ *
+ * Einzige Quelle fuer diese Frage: Planfenster, Ticketliste und saemtliche
+ * Ausgaben rufen dieselbe Funktion auf. Vorher liefen Ansicht und Export ueber
+ * verschiedene Endpunkte mit verschiedenem Filterumfang - dass beide dieselbe
+ * Menge zeigen, war damit nicht sichergestellt, sondern Zufall.
+ */
+export async function listVisiblePlanPoints(
+  projectId: string,
+  planId: string,
+  filters?: PointFilters
+): Promise<PointWithPlan[]> {
+  if (!navigator.onLine) {
+    const offline = await getOfflinePointsByPlan(planId);
+    return offline
+      .filter((point) => passtZuFiltern(point, filters))
+      .map((point) => ({ ...point, plan_name: null }));
+  }
+  return listProjectPoints(projectId, { ...filters, planId });
+}
+
+export function listProjectPoints(projectId: string, filters?: PointFilters): Promise<PointWithPlan[]> {
+  return authFetch(
+    `/api/projects/${projectId}/points?${pointFilterParams(filters).toString()}`
+  ).then((res) => json(res));
 }
 
 export function deleteProject(projectId: string): Promise<void> {
