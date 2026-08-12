@@ -11,7 +11,7 @@ import {
   listAttachmentsForPoint,
 } from "../repositories/attachmentRepository.js";
 import { ATTACHMENTS_BUCKET, supabaseAdmin } from "../supabase.js";
-import { hasRole, requireProjectAccess, scopedAssignedTo } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable, scopedAssignedTo } from "../authorization.js";
 
 const ALLOWED_MIME_PREFIXES = ["image/"];
 const ALLOWED_MIME_EXACT = ["application/pdf"];
@@ -37,7 +37,7 @@ export async function attachmentRoutes(server: FastifyInstance): Promise<void> {
       }
       const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+        if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
@@ -79,7 +79,7 @@ export async function attachmentRoutes(server: FastifyInstance): Promise<void> {
     }
     const plan = await getPlanById(point.plan_id);
     if (plan) {
-      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+      if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
     }
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });

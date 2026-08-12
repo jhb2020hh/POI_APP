@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { isMember } from "./repositories/projectMemberRepository.js";
+import { getProjectById } from "./repositories/projectRepository.js";
 
 export const ROLES = ["extern", "mitarbeiter", "admin"] as const;
 export type Role = (typeof ROLES)[number];
@@ -41,6 +42,38 @@ export async function requireProjectAccess(
 ): Promise<boolean> {
   if (!(await canAccessProject(request, projectId))) {
     reply.status(403).send({ error: "kein Zugriff auf dieses Projekt" });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Zugriff *und* Schreibrecht: ein archiviertes Projekt bleibt lesbar, laesst
+ * sich aber nicht mehr aendern.
+ *
+ * Bewusst eine einzige Funktion und nicht je Route eine eigene Abfrage. Es gibt
+ * ueber ein Dutzend schreibende Endpunkte - Punkte, Zeichnungen, Anhaenge,
+ * Kommentare, Kategorien, Mitglieder, Ordner, Sync. Verteilte Einzelpruefungen
+ * waeren genau die Stelle, an der spaeter eine vergessen wird und ein
+ * archiviertes Projekt doch wieder beschreibbar ist.
+ *
+ * In jeder schreibenden Route anstelle von requireProjectAccess verwenden.
+ */
+export async function requireProjectWritable(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  projectId: string
+): Promise<boolean> {
+  if (!(await requireProjectAccess(request, reply, projectId))) return false;
+
+  const projekt = await getProjectById(projectId);
+  if (projekt?.archived) {
+    reply.status(409).send({
+      error:
+        "Dieses Projekt ist archiviert und kann nicht mehr geändert werden. " +
+        "Ein Administrator kann es im Admin-Menü zurückholen.",
+      code: "PROJEKT_ARCHIVIERT",
+    });
     return false;
   }
   return true;

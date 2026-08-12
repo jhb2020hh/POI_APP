@@ -11,7 +11,7 @@ import {
   unarchiveCategory,
   updateCategory,
 } from "../repositories/categoryRepository.js";
-import { hasRole, requireProjectAccess, requireRole } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable, requireRole } from "../authorization.js";
 
 export async function categoryRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
@@ -42,7 +42,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, project.id))) return;
+    if (!(await requireProjectWritable(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -124,7 +124,7 @@ export async function categoryRoutes(server: FastifyInstance): Promise<void> {
           .send({ error: "Zentrale Vorlagen dürfen nur Administratoren ändern" });
       }
     } else {
-      if (!(await requireProjectAccess(request, reply, bestehend.project_id))) return;
+      if (!(await requireProjectWritable(request, reply, bestehend.project_id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }

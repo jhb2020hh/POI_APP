@@ -809,8 +809,30 @@ export function listProjectPoints(projectId: string, filters?: PointFilters): Pr
   ).then((res) => json(res));
 }
 
-export function deleteProject(projectId: string): Promise<void> {
-  return authFetch(`/api/projects/${projectId}`, { method: "DELETE" }).then(() => undefined);
+export function listArchivedProjects(): Promise<Project[]> {
+  return authFetch("/api/projects/archived").then((res) => json(res));
+}
+
+export async function archiveProject(projectId: string): Promise<void> {
+  const res = await authFetch(`/api/projects/${projectId}/archive`, { method: "POST" });
+  if (!res.ok) await json(res);
+}
+
+export async function unarchiveProject(projectId: string): Promise<void> {
+  const res = await authFetch(`/api/projects/${projectId}/unarchive`, { method: "POST" });
+  if (!res.ok) await json(res);
+}
+
+/**
+ * Loescht ein Projekt endgueltig - mit Tickets, Zeichnungen und Fotos.
+ *
+ * Der Server laesst das nur bei archivierten Projekten zu. Frueher archivierte
+ * dieser Aufruf lediglich, hiess aber schon "loeschen"; jetzt tut er, was der
+ * Name sagt.
+ */
+export async function deleteProject(projectId: string): Promise<void> {
+  const res = await authFetch(`/api/projects/${projectId}`, { method: "DELETE" });
+  if (!res.ok) await json(res);
 }
 
 export function updateProjectDates(

@@ -14,7 +14,7 @@ import {
   getToken,
   listAttachments,
   listCategories,
-  deleteProject,
+  archiveProject,
   listGlobalCategories,
   listPlanFolders,
   listPlans,
@@ -1041,8 +1041,10 @@ function App() {
           canManageMembers={currentUser?.role === 'admin'}
           onExportTemplatesChanged={() => refreshExportTemplates(selectedProjectId)}
           onRemoveMember={handleRemoveMember}
-          onDeleteProject={async () => {
-            await deleteProject(selectedProjectId)
+          onArchiveProject={async () => {
+            await archiveProject(selectedProjectId)
+            // Aus der Liste nehmen statt neu zu laden: die Liste der aktiven
+            // Projekte enthaelt archivierte ohnehin nicht mehr.
             setProjects((prev) => prev.filter((p) => p.id !== selectedProjectId))
             setSettingsOpen(false)
             setSelectedProjectId(null)
@@ -1054,8 +1056,18 @@ function App() {
         <AdminMenu
           users={users}
           templates={templates}
+          projects={projects}
           onUserCreated={() => listUsers().then(setUsers)}
           onTemplatesChanged={refreshTemplates}
+          onProjectsChanged={() => {
+            listProjects().then(setProjects)
+            // Ein archiviertes oder geloeschtes Projekt darf nicht ausgewaehlt
+            // bleiben - die Ansicht zeigte sonst Daten, die es nicht mehr gibt.
+            setSelectedProjectId((bisher) => {
+              if (!bisher) return bisher
+              return projects.some((p) => p.id === bisher) ? bisher : null
+            })
+          }}
           onClose={() => setAdminMenuOpen(false)}
         />
       )}

@@ -10,7 +10,7 @@ import {
   updatePoint,
 } from "../repositories/pointRepository.js";
 import { recordChange } from "../repositories/changeLogRepository.js";
-import { hasRole, requireProjectAccess, scopedAssignedTo } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable, scopedAssignedTo } from "../authorization.js";
 
 // Hinweis: Es wird hier nichts mehr aktiv an andere Clients gesendet. Die
 // Live-Aktualisierung laeuft ueber Supabase Realtime, das Aenderungen an der
@@ -133,7 +133,7 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
     if (!plan) {
       return reply.status(404).send({ error: "Plan nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+    if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -191,7 +191,7 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
     }
     const plan = await getPlanById(existing.plan_id);
     if (plan) {
-      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+      if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
     }
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
@@ -228,7 +228,7 @@ export async function pointRoutes(server: FastifyInstance): Promise<void> {
       }
       const plan = await getPlanById(existing.plan_id);
       if (plan) {
-        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+        if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });

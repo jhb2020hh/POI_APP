@@ -8,7 +8,7 @@ import {
   updatePlanFolder,
 } from "../repositories/planRepository.js";
 import { PLANS_BUCKET, supabaseAdmin } from "../supabase.js";
-import { hasRole, requireProjectAccess } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable } from "../authorization.js";
 
 // Gueltigkeit der Download-Links. Kurz genug, dass ein weitergereichter Link
 // nicht dauerhaft Zugriff gewaehrt, lang genug fuer das Oeffnen grosser Plaene
@@ -33,7 +33,7 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!(await requireProjectAccess(request, reply, project.id))) return;
+      if (!(await requireProjectWritable(request, reply, project.id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }
@@ -66,7 +66,7 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, project.id))) return;
+    if (!(await requireProjectWritable(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -115,7 +115,7 @@ export async function planRoutes(server: FastifyInstance): Promise<void> {
       if (!plan) {
         return reply.status(404).send({ error: "Plan nicht gefunden" });
       }
-      if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+      if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }

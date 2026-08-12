@@ -7,7 +7,7 @@ import {
   listExportTemplatesForProject,
   updateExportTemplate,
 } from "../repositories/exportTemplateRepository.js";
-import { hasRole, requireProjectAccess } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable } from "../authorization.js";
 
 /** Grenze gegen versehentlich riesige Vorlagen; 60 Spalten sind reichlich. */
 const MAX_SPALTEN = 60;
@@ -46,7 +46,7 @@ export async function exportTemplateRoutes(server: FastifyInstance): Promise<voi
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, project.id))) return;
+    if (!(await requireProjectWritable(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -98,7 +98,7 @@ export async function exportTemplateRoutes(server: FastifyInstance): Promise<voi
       }
       return true;
     }
-    if (!(await requireProjectAccess(request, reply, vorlageProjektId))) return false;
+    if (!(await requireProjectWritable(request, reply, vorlageProjektId))) return false;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       return false;

@@ -22,6 +22,7 @@
     "diagnose:filter": "tsx src/scripts/diagnoseFilter.ts",
     "diagnose:kategorie": "tsx src/scripts/diagnoseKategorie.ts",
     "diagnose:export": "tsx src/scripts/diagnoseExport.ts",
+    "diagnose:loeschen": "tsx src/scripts/diagnoseLoeschen.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "set:password": "tsx src/scripts/setPassword.ts",
     "set:role": "tsx src/scripts/setRole.ts",

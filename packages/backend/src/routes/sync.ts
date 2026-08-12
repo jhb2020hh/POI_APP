@@ -12,7 +12,7 @@ import {
   getLatestSeq,
   recordChange,
 } from "../repositories/changeLogRepository.js";
-import { hasRole, requireProjectAccess } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable } from "../authorization.js";
 
 interface SyncChange {
   localId: string;
@@ -67,7 +67,7 @@ export async function syncRoutes(server: FastifyInstance): Promise<void> {
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
-      if (!(await requireProjectAccess(request, reply, project.id))) return;
+      if (!(await requireProjectWritable(request, reply, project.id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }

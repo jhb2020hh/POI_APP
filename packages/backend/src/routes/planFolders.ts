@@ -9,7 +9,7 @@ import {
   moveFolder,
   renameFolder,
 } from "../repositories/planFolderRepository.js";
-import { hasRole, requireProjectAccess } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable } from "../authorization.js";
 
 export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
@@ -34,7 +34,7 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
     if (!project) {
       return reply.status(404).send({ error: "Projekt nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, project.id))) return;
+    if (!(await requireProjectWritable(request, reply, project.id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -59,7 +59,7 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
     if (!folder) {
       return reply.status(404).send({ error: "Ordner nicht gefunden" });
     }
-    if (!(await requireProjectAccess(request, reply, folder.project_id))) return;
+    if (!(await requireProjectWritable(request, reply, folder.project_id))) return;
     if (!hasRole(request, ["mitarbeiter", "admin"])) {
       return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
     }
@@ -80,7 +80,7 @@ export async function planFolderRoutes(server: FastifyInstance): Promise<void> {
       if (!folder) {
         return reply.status(404).send({ error: "Ordner nicht gefunden" });
       }
-      if (!(await requireProjectAccess(request, reply, folder.project_id))) return;
+      if (!(await requireProjectWritable(request, reply, folder.project_id))) return;
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });
       }

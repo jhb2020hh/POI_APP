@@ -6,7 +6,11 @@ import {
   listMembersForProject,
   removeMember,
 } from "../repositories/projectMemberRepository.js";
-import { requireProjectAccess, requireRole } from "../authorization.js";
+import {
+  requireProjectAccess,
+  requireProjectWritable,
+  requireRole,
+} from "../authorization.js";
 
 export async function projectMemberRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
@@ -31,6 +35,9 @@ export async function projectMemberRoutes(server: FastifyInstance): Promise<void
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
+      // Fehlte bisher ganz: die Rollenpruefung im preHandler sagt nur, *wer*
+      // darf, nicht *ob das Projekt* noch geaendert werden darf.
+      if (!(await requireProjectWritable(request, reply, project.id))) return;
       const user = await getUserByEmail(request.body.email);
       if (!user) {
         return reply.status(404).send({ error: "Nutzer nicht gefunden" });
@@ -48,6 +55,7 @@ export async function projectMemberRoutes(server: FastifyInstance): Promise<void
       if (!project) {
         return reply.status(404).send({ error: "Projekt nicht gefunden" });
       }
+      if (!(await requireProjectWritable(request, reply, project.id))) return;
       await removeMember(project.id, request.params.userId);
       return reply.status(204).send();
     }

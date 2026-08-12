@@ -6,7 +6,7 @@ import {
   createComment,
   listCommentsForPoint,
 } from "../repositories/pointCommentRepository.js";
-import { hasRole, requireProjectAccess } from "../authorization.js";
+import { hasRole, requireProjectAccess, requireProjectWritable } from "../authorization.js";
 
 export async function pointDetailRoutes(server: FastifyInstance): Promise<void> {
   server.addHook("preHandler", server.authenticate);
@@ -56,7 +56,7 @@ export async function pointDetailRoutes(server: FastifyInstance): Promise<void> 
       }
       const plan = await getPlanById(point.plan_id);
       if (plan) {
-        if (!(await requireProjectAccess(request, reply, plan.project_id))) return;
+        if (!(await requireProjectWritable(request, reply, plan.project_id))) return;
       }
       if (!hasRole(request, ["mitarbeiter", "admin"])) {
         return reply.status(403).send({ error: "keine Berechtigung für diese Aktion" });

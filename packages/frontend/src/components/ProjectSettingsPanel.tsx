@@ -18,7 +18,7 @@ interface ProjectSettingsPanelProps {
   onProjectUpdated: (project: Project) => void
   onClose: () => void
   canDelete: boolean
-  onDeleteProject: () => Promise<void>
+  onArchiveProject: () => Promise<void>
   /** Zuordnen und Entfernen sind serverseitig Admins vorbehalten. */
   canManageMembers: boolean
   onRemoveMember: (userId: string) => Promise<void>
@@ -38,7 +38,7 @@ export function ProjectSettingsPanel({
   onProjectUpdated,
   onClose,
   canDelete,
-  onDeleteProject,
+  onArchiveProject,
   canManageMembers,
   onRemoveMember,
   onExportTemplatesChanged,
@@ -73,15 +73,27 @@ export function ProjectSettingsPanel({
     }
   }
 
-  async function handleDelete() {
-    if (!confirm('Projekt wirklich löschen? Es verschwindet aus allen Ansichten (Daten bleiben in der Datenbank erhalten).')) {
+  /**
+   * Hiess frueher "Projekt loeschen", tat aber nur dies: archivieren. Jetzt
+   * heisst es, was es tut - endgueltiges Loeschen gibt es getrennt davon im
+   * Admin-Menue unter "Projekte".
+   */
+  async function handleArchive() {
+    if (
+      !confirm(
+        `Projekt „${project?.name ?? ''}" archivieren?\n\n` +
+          'Es bleibt vollständig erhalten und einsehbar, lässt sich aber nicht mehr bearbeiten: ' +
+          'keine neuen Tickets, keine Änderungen, keine neuen Zeichnungen.\n\n' +
+          'Ein Administrator kann es im Admin-Menü unter „Projekte" jederzeit zurückholen.'
+      )
+    ) {
       return
     }
-    setDeleteStatus('Löscht…')
+    setDeleteStatus('Archiviert…')
     try {
-      await onDeleteProject()
+      await onArchiveProject()
     } catch (err) {
-      setDeleteStatus(`Fehler: ${err}`)
+      setDeleteStatus(`Fehler: ${err instanceof Error ? err.message : err}`)
     }
   }
 
@@ -113,8 +125,8 @@ export function ProjectSettingsPanel({
                 {deleteStatus && (
                   <span className="hinweis">{deleteStatus}</span>
                 )}
-                <button type="button" className="btn btn-ghost btn-ghost-gefahr btn-sm" onClick={handleDelete}>
-                  Projekt löschen
+                <button type="button" className="btn btn-ghost btn-sm" onClick={handleArchive}>
+                  Projekt archivieren
                 </button>
               </>
             )}

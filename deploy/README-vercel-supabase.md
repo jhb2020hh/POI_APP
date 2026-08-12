@@ -72,7 +72,7 @@ Einmalig, aus dem Projektstamm mit gesetzter `.env`:
 
 ```bash
 npm install
-npm run db:migrate       # legt das Schema an (23 Migrationen)
+npm run db:migrate       # legt das Schema an (24 Migrationen)
 npm run setup:storage    # legt die privaten Ablagen "plans" und "attachments" an
 npm run seed:admin -- <email> "<anzeigename>" [rolle] [--password=<passwort>]
 ```
@@ -240,7 +240,46 @@ selbst preiszugeben.
 
 ---
 
-## 6. Was sich gegenüber dem LAN-Betrieb geändert hat
+## 6. Projekte archivieren und löschen
+
+Zwei getrennte Vorgänge — der Umweg über das Archiv ist der eigentliche Schutz.
+
+**Archivieren** kann jeder Admin, in den Projekt-Einstellungen oder im
+Admin-Menü unter *Projekte* (dort auch mehrere auf einmal). Ein archiviertes
+Projekt bleibt vollständig erhalten und einsehbar, lässt sich aber nicht mehr
+bearbeiten: keine neuen Tickets, keine Änderungen, keine neuen Zeichnungen.
+Zurückholen ist jederzeit möglich.
+
+Der Schreibschutz sitzt in **einer** Funktion — `requireProjectWritable` in
+[authorization.ts](../packages/backend/src/authorization.ts) — und ist in allen
+18 schreibenden Endpunkten eingehängt. Verteilte Einzelprüfungen wären genau
+die Stelle, an der später eine vergessen wird.
+
+**Endgültig löschen** geht nur aus dem Archiv heraus, nur für Admins, und nur
+nach Abtippen des Projektnamens. Gelöscht wird alles: Tickets, Kommentare,
+Verlauf, Zeichnungen, Ordner, projekteigene Kategorien und Exportvorlagen,
+Mitgliedschaften, Nummernzähler, Änderungsprotokoll — **und die Dateien in
+Supabase Storage**. Projektübergreifende Vorlagen (`project_id IS NULL`)
+bleiben stehen; sie gehören allen Projekten.
+
+Reihenfolge: erst die Dateipfade sammeln, dann die Zeilen in **einer**
+Transaktion löschen, danach die Dateien. Bricht das Aufräumen der Dateien ab,
+bleibt eine verwaiste Datei liegen — ärgerlich, aber harmlos. Andersherum gäbe
+es Tickets mit Fotos, die sich nicht mehr öffnen lassen.
+
+```bash
+npm run diagnose:loeschen
+```
+
+Legt ein Projekt mit Zeichnung, Ordner, Ticket, Anhang, Kommentar,
+Benachrichtigung, Exportvorlage und Änderungsprotokoll an, archiviert es, holt
+es zurück, löscht endgültig und zählt anschließend **13 Tabellen** einzeln
+nach. Zusätzlich wird geprüft, dass projektübergreifende Vorlagen den Vorgang
+überstehen.
+
+---
+
+## 7. Was sich gegenüber dem LAN-Betrieb geändert hat
 
 | Vorher | Jetzt |
 |---|---|
@@ -272,7 +311,7 @@ niemals im Frontend landen.
 
 ---
 
-## 7. Abnahme
+## 8. Abnahme
 
 Nach dem ersten Deployment der Reihe nach prüfen:
 
@@ -300,7 +339,7 @@ Es gibt im Projekt kein Test-Framework; diese Kette ist die Absicherung.
 
 ---
 
-## 8. Grenzen des kostenlosen Tarifs
+## 9. Grenzen des kostenlosen Tarifs
 
 - **Supabase Free** pausiert die Datenbank nach 7 Tagen ohne Zugriff; sie muss
   dann im Dashboard manuell reaktiviert werden. 500 MB Datenbank und 1 GB
