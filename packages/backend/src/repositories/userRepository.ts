@@ -9,6 +9,8 @@ export interface User {
   created_at: string;
   /** 0 = wartet auf Freischaltung durch einen Admin, 1 = freigeschaltet. */
   approved: number;
+  /** 0 = keine Erinnerungsmails zu Fristen, 1 = Erinnerungen erwuenscht. */
+  email_benachrichtigungen: number;
 }
 
 /**
@@ -132,6 +134,17 @@ export async function setUserApproved(
   const result = await db
     .prepare("UPDATE users SET approved = ? WHERE id = ?")
     .run(approved ? 1 : 0, id);
+  return result.changes > 0;
+}
+
+/** Schaltet die taeglichen Erinnerungsmails fuer ein Konto ein oder aus. */
+export async function setEmailBenachrichtigungen(
+  id: string,
+  aktiv: boolean
+): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE users SET email_benachrichtigungen = ? WHERE id = ?")
+    .run(aktiv ? 1 : 0, id);
   return result.changes > 0;
 }
 

@@ -5,9 +5,9 @@ API laufen auf Vercel, Datenbank, Anmeldung, Dateiablage und Live-Updates bei
 Supabase.
 
 ```
-Browser ──► Vercel (Region fra1)
+Browser ──► Vercel (Region dub1)
               ├─ statisch: packages/frontend/dist   (SPA + sw.js)
-              └─ Function: api/[...path].ts         (Fastify, alle /api-Routen)
+              └─ Function: api/index.ts             (Fastify, alle /api-Routen)
                             │
               ┌─────────────┼──────────────┬────────────────┐
               ▼             ▼              ▼                ▼
@@ -33,6 +33,10 @@ eintragen.
 | `VITE_SUPABASE_URL` | derselbe Wert wie `SUPABASE_URL` | öffentlich |
 | `VITE_SUPABASE_ANON_KEY` | Project Settings → API (anon/public) | öffentlich |
 | `SUPABASE_JWT_SECRET` | nur bei älteren Projekten mit HS256-Signatur | geheim |
+| `RESEND_API_KEY` | Resend → API Keys | **streng geheim** |
+| `MAIL_FROM` | Absenderadresse, siehe Abschnitt 5 | öffentlich |
+| `APP_BASE_URL` | Adresse der Anwendung, ohne Schrägstrich am Ende | öffentlich |
+| `CRON_SECRET` | selbst vergeben, lang und zufällig | **streng geheim** |
 
 ¹ technisch nicht geheim, wird aber nur serverseitig gebraucht.
 
@@ -68,7 +72,7 @@ Einmalig, aus dem Projektstamm mit gesetzter `.env`:
 
 ```bash
 npm install
-npm run db:migrate       # legt das Schema an (19 Migrationen)
+npm run db:migrate       # legt das Schema an (22 Migrationen)
 npm run setup:storage    # legt die privaten Ablagen "plans" und "attachments" an
 npm run seed:admin -- <email> "<anzeigename>" [rolle] [--password=<passwort>]
 ```
@@ -172,7 +176,71 @@ der lokalen `.env`.
 
 ---
 
-## 5. Was sich gegenüber dem LAN-Betrieb geändert hat
+## 5. Erinnerungsmails zu Fälligkeiten
+
+Ein täglicher Auftrag um **05:00 UTC** (Eintrag `crons` in
+[`vercel.json`](../vercel.json)) ruft `GET /api/cron/due-date-digest` auf und
+verschickt **eine** Mail je Person mit bis zu drei Abschnitten:
+
+| Abschnitt | Auswahl | Wiederholung |
+|---|---|---|
+| Überfällig | Frist liegt vor heute | höchstens **einmal pro Woche** |
+| Heute fällig | Frist ist heute | einmal je Frist |
+| Demnächst fällig | Frist in den nächsten 3 Tagen | einmal je Frist |
+
+Berücksichtigt werden nur offene Tickets (`open`, `in_bearbeitung`, `geprueft`)
+aus nicht archivierten Projekten. Empfänger sind die zuständige Person und alle
+Admins — Letztere auch bei Tickets ohne Zuordnung, die sonst niemanden
+erreichen würden.
+
+**Doppelversand** ist über die Spalte `notifications.dedupe_key` ausgeschlossen
+(Migration `0022`). Der Schlüssel enthält die Frist selbst: wird ein Ticket
+verschoben, wird die neue Frist wieder gemeldet. Der Anspruch auf eine Zeile
+wird **vor** dem Absenden eingetragen und bei einem Fehler zurückgenommen —
+zwei gleichzeitig laufende Aufrufe können deshalb nicht dieselbe Mail zweimal
+verschicken.
+
+**Absender.** Solange in Resend keine eigene Domäne verifiziert ist, muss
+`MAIL_FROM` auf der Testdomäne `onboarding@resend.dev` stehen bleiben, und
+Resend liefert nur an die Adresse des Resend-Kontos aus. Für den echten Betrieb
+ist eine verifizierte Domäne nötig (Resend → Domains, DNS-Einträge setzen),
+danach etwa `POI-App <poi@caverion.example>`.
+
+**Abmelden.** Jedes Konto kann die Erinnerungen für sich abschalten — Umschlag-
+Schaltfläche oben rechts. Der Wert steht in `users.email_benachrichtigungen`.
+
+**Prüfen:**
+
+```bash
+npm run diagnose:mail                 # Trockenlauf, verschickt nichts
+npm run diagnose:mail -- --senden     # verschickt echte Mails
+```
+
+Das Skript legt ein eigenes Projekt mit vier Tickets an (überfällig, heute,
+in zwei Tagen, in zwei Wochen) plus einem erledigten, prüft die Auswahl, den
+Doppelversandschutz und die erneute Meldung nach einer verschobenen Frist —
+und räumt hinterher auf.
+
+Von Hand auslösen lässt sich der Lauf auch im Betrieb:
+
+```bash
+curl -X POST "https://<projekt>.vercel.app/api/cron/due-date-digest?trockenlauf=1" \
+     -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Ohne gesetztes `CRON_SECRET` antwortet der Endpunkt mit **401** — ein offener
+Endpunkt, der Mails auslöst, wäre aus dem Netz beliebig oft aufrufbar. Ob
+Schlüssel und Geheimnis gesetzt sind, zeigt `/api/health` unter
+`konfiguration.mailversand` bzw. `konfiguration.cronGeheimnis`, ohne die Werte
+selbst preiszugeben.
+
+> **Vercel Hobby** erlaubt nur *einen* Cron-Lauf pro Tag; die Uhrzeit kann um
+> bis zu eine Stunde abweichen. Für einen festen Zeitpunkt ist der Pro-Tarif
+> nötig.
+
+---
+
+## 6. Was sich gegenüber dem LAN-Betrieb geändert hat
 
 | Vorher | Jetzt |
 |---|---|
@@ -204,7 +272,7 @@ niemals im Frontend landen.
 
 ---
 
-## 6. Abnahme
+## 7. Abnahme
 
 Nach dem ersten Deployment der Reihe nach prüfen:
 
@@ -224,12 +292,15 @@ Nach dem ersten Deployment der Reihe nach prüfen:
 8. Projekt offline verfügbar machen, Netzwerk in den Entwicklertools trennen,
    Plan öffnen, Ticket anlegen, wieder verbinden — der Abgleich läuft durch.
 9. CSV-Export und PDF-Abnahmeprotokoll erzeugen.
+10. Erinnerungsmail von Hand auslösen (Abschnitt 5) — erst mit
+    `?trockenlauf=1`, dann echt. Anschließend ein zweites Mal: es darf nichts
+    mehr rausgehen.
 
 Es gibt im Projekt kein Test-Framework; diese Kette ist die Absicherung.
 
 ---
 
-## 7. Grenzen des kostenlosen Tarifs
+## 8. Grenzen des kostenlosen Tarifs
 
 - **Supabase Free** pausiert die Datenbank nach 7 Tagen ohne Zugriff; sie muss
   dann im Dashboard manuell reaktiviert werden. 500 MB Datenbank und 1 GB

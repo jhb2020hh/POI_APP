@@ -49,6 +49,7 @@ import { ProjectSettingsPanel } from './components/ProjectSettingsPanel'
 import { TopBar } from './components/layout/TopBar'
 import { Sidebar } from './components/layout/Sidebar'
 import { AdminMenu } from './components/AdminMenu'
+import { BenachrichtigungenDialog } from './components/BenachrichtigungenDialog'
 import { STATUS_LABELS } from './constants'
 import { genId } from './utils/id'
 import { exportPlansToPdf } from './utils/planExportPdf'
@@ -63,6 +64,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getToken()))
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
   const [adminMenuOpen, setAdminMenuOpen] = useState(false)
+  const [benachrichtigungenOffen, setBenachrichtigungenOffen] = useState(false)
   const [templates, setTemplates] = useState<Category[]>([])
 
   const [projects, setProjects] = useState<Project[]>([])
@@ -591,6 +593,7 @@ function App() {
         }}
         canAccessAdminMenu={canAccessAdminMenu}
         onOpenAdminMenu={() => setAdminMenuOpen(true)}
+        onOpenBenachrichtigungen={() => setBenachrichtigungenOffen(true)}
         onToggleSidebar={() => setSidebarOffen((v) => !v)}
       />
 
@@ -908,6 +911,16 @@ function App() {
           onUserCreated={() => listUsers().then(setUsers)}
           onTemplatesChanged={refreshTemplates}
           onClose={() => setAdminMenuOpen(false)}
+        />
+      )}
+
+      {benachrichtigungenOffen && (
+        <BenachrichtigungenDialog
+          aktiv={currentUser?.emailBenachrichtigungen !== false}
+          onGeaendert={(aktiv) =>
+            setCurrentUser((bisher) => (bisher ? { ...bisher, emailBenachrichtigungen: aktiv } : bisher))
+          }
+          onClose={() => setBenachrichtigungenOffen(false)}
         />
       )}
 

@@ -6,6 +6,7 @@ import {
   getUserById,
   listPendingUsers,
   listUsers,
+  setEmailBenachrichtigungen,
   setUserApproved,
 } from "../repositories/userRepository.js";
 import { requireRole, ROLES } from "../authorization.js";
@@ -25,8 +26,31 @@ export async function userRoutes(server: FastifyInstance): Promise<void> {
       email: request.user.email,
       role: request.user.role,
       displayName: profile?.display_name ?? request.user.email,
+      // Fehlt das Profil, gilt der Standard aus der Migration: Erinnerungen an.
+      emailBenachrichtigungen: (profile?.email_benachrichtigungen ?? 1) === 1,
     };
   });
+
+  /** Abmeldung von den taeglichen Erinnerungsmails - jeder fuer sich selbst. */
+  server.patch<{ Body: { emailBenachrichtigungen?: boolean } }>(
+    "/api/me/benachrichtigungen",
+    async (request, reply) => {
+      const { emailBenachrichtigungen } = request.body ?? {};
+      if (typeof emailBenachrichtigungen !== "boolean") {
+        return reply
+          .status(400)
+          .send({ error: "emailBenachrichtigungen muss true oder false sein" });
+      }
+      const geaendert = await setEmailBenachrichtigungen(
+        request.user.sub,
+        emailBenachrichtigungen
+      );
+      if (!geaendert) {
+        return reply.status(404).send({ error: "Profil nicht gefunden" });
+      }
+      return { emailBenachrichtigungen };
+    }
+  );
 
   server.get("/api/users", async () => {
     return listUsers();

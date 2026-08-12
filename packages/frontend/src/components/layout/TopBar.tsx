@@ -6,6 +6,8 @@ interface TopBarProps {
   onLogout: () => void
   canAccessAdminMenu: boolean
   onOpenAdminMenu: () => void
+  /** Erinnerungsmails ein- oder ausschalten - steht jedem Konto offen. */
+  onOpenBenachrichtigungen: () => void
   /** Blendet die Seitenleiste ein/aus - nur auf schmalen Bildschirmen sichtbar. */
   onToggleSidebar: () => void
 }
@@ -18,6 +20,7 @@ export function TopBar({
   onLogout,
   canAccessAdminMenu,
   onOpenAdminMenu,
+  onOpenBenachrichtigungen,
   onToggleSidebar,
 }: TopBarProps) {
   return (
@@ -49,6 +52,14 @@ export function TopBar({
         )}
         <button type="button" className="btn btn-secondary btn-sm" onClick={onSync} disabled={!isOnline}>
           Synchronisieren
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onOpenBenachrichtigungen}
+          title="Erinnerungen per E-Mail"
+        >
+          ✉
         </button>
         {canAccessAdminMenu && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenAdminMenu}>

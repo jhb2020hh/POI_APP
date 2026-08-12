@@ -18,6 +18,7 @@
     "db:inspect": "tsx src/scripts/inspectDb.ts",
     "diagnose:upload": "tsx src/scripts/diagnoseUpload.ts",
     "diagnose:registrierung": "tsx src/scripts/diagnoseRegistrierung.ts",
+    "diagnose:mail": "tsx src/scripts/diagnoseMail.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "set:password": "tsx src/scripts/setPassword.ts",
     "set:role": "tsx src/scripts/setRole.ts",

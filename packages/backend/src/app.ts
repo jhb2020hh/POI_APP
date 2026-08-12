@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import authPlugin from "./plugins/auth.js";
 import { db, isDatabaseConfigured } from "./db/connection.js";
 import { isSupabaseConfigured } from "./supabase.js";
+import { isMailConfigured } from "./mail/resend.js";
 import { projectRoutes } from "./routes/projects.js";
 import { projectMemberRoutes } from "./routes/projectMembers.js";
 import { userRoutes } from "./routes/users.js";
@@ -17,6 +18,7 @@ import { statsRoutes } from "./routes/stats.js";
 import { offlineRoutes } from "./routes/offline.js";
 import { syncRoutes } from "./routes/sync.js";
 import { settingsRoutes } from "./routes/settings.js";
+import { cronRoutes } from "./routes/cron.js";
 
 /**
  * Baut die Fastify-Anwendung, ohne zu lauschen.
@@ -65,6 +67,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     const konfiguration = {
       datenbank: isDatabaseConfigured,
       supabase: isSupabaseConfigured,
+      mailversand: isMailConfigured,
+      cronGeheimnis: Boolean(process.env.CRON_SECRET),
     };
 
     let datenbankverbindung: string;
@@ -104,6 +108,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await server.register(offlineRoutes);
   await server.register(syncRoutes);
   await server.register(settingsRoutes);
+  await server.register(cronRoutes);
 
   return server;
 }

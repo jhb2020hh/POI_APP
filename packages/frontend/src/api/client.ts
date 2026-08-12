@@ -35,6 +35,22 @@ export interface CurrentUser {
   email: string;
   displayName: string;
   role: string;
+  /** Taegliche Erinnerungsmails zu Fristen - jeder schaltet sie fuer sich ab. */
+  emailBenachrichtigungen?: boolean;
+}
+
+export async function setEmailBenachrichtigungen(aktiv: boolean): Promise<boolean> {
+  const antwort = await authFetch('/api/me/benachrichtigungen', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emailBenachrichtigungen: aktiv }),
+  });
+  const daten = await json<{ emailBenachrichtigungen: boolean }>(antwort);
+  const aktuell = getCurrentUser();
+  if (aktuell) {
+    setCurrentUser({ ...aktuell, emailBenachrichtigungen: daten.emailBenachrichtigungen });
+  }
+  return daten.emailBenachrichtigungen;
 }
 
 /**
