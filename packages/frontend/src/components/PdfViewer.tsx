@@ -11,11 +11,15 @@ import {
   ZOOM_STUFE,
   begrenzeVerschiebung,
   berechneEinpassung,
-  berechneZeichenMassstab,
+  berechneScharfMassstab,
+  berechneSichtfenster,
+  geraeteDichte,
+  liegtDrin,
   radZuFaktor,
   zoomeAufPunkt,
   type Ansicht,
   type Masze,
+  type Rechteck,
 } from '../utils/planAnsicht'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -42,17 +46,23 @@ const NACHSCHAERFEN_MS = 150
  *
  * Der tragende Gedanke: Sehen und Zeichnen sind getrennt.
  *
- *   .plan-flaeche   der sichtbare Ausschnitt, faengt alle Eingaben ab
- *     .plan-buehne  feste CSS-Groesze (Seite im Einpassmaszstab),
- *                   bewegt wird sie ueber transform - sofort und ohne Umbruch
- *       <canvas>    dieselbe CSS-Groesze, aber ein Bitmap in der Aufloesung,
- *                   die der aktuelle Zoom braucht
- *       Pins        weiterhin in Prozent, wachsen aber nicht mit
+ *   .plan-flaeche      der sichtbare Ausschnitt, faengt alle Eingaben ab
+ *     .plan-buehne     feste CSS-Groesze (Seite im Einpassmaszstab),
+ *                      bewegt wird sie ueber transform - sofort, ohne Umbruch
+ *       Grundebene     die ganze Seite, einmal gezeichnet. Bei starkem Zoom
+ *                      unscharf, aber immer sofort da.
+ *       Scharfebene    nur der sichtbare Ausschnitt, in voller Aufloesung.
+ *       Pins           weiterhin in Prozent, wachsen aber nicht mit
  *
  * Vorher lag beides auf einer Groesze: `scale` bestimmte zugleich den Anblick
  * und die Aufloesung des Canvas. Jede Bewegung hing damit am Neuzeichnen, das
- * Layout aenderte sich dabei, und der Ausschnitt sprang. Jetzt aendert das
- * Nachschaerfen nur noch das Bitmap - sichtbar bewegt sich dabei nichts.
+ * Layout aenderte sich dabei, und der Ausschnitt sprang.
+ *
+ * Zwei Ebenen und nicht eine, weil die ganze Seite in voller Aufloesung nicht
+ * darstellbar ist: ein A1-Plan bei 800 % braeuchte rund 1,6 GB. Nur den
+ * Ausschnitt zu zeichnen kostet dagegen unabhaengig vom Zoom immer gleich
+ * viel. Die Grundebene darunter sorgt dafuer, dass beim Schwenken kein weiszes
+ * Loch entsteht, solange der scharfe Ausschnitt noch nachzieht.
  */
 interface PdfViewerProps {
   fileUrl: string
@@ -78,9 +88,11 @@ export function PdfViewer({
 
   const flaecheRef = useRef<HTMLDivElement>(null)
   const buehneRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const grundCanvasRef = useRef<HTMLCanvasElement>(null)
+  const scharfCanvasRef = useRef<HTMLCanvasElement>(null)
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
-  const renderTaskRef = useRef<RenderTask | null>(null)
+  const grundTaskRef = useRef<RenderTask | null>(null)
+  const scharfTaskRef = useRef<RenderTask | null>(null)
   /** Nur zum Freigeben - `destroy` haengt am Ladeauftrag, nicht am Dokument. */
   const ladeAuftragRef = useRef<PDFDocumentLoadingTask | null>(null)
 
@@ -91,6 +103,12 @@ export function PdfViewer({
   /** Bildschirmpunkte je PDF-Punkt, wenn die ganze Seite sichtbar ist. */
   const [einpass, setEinpass] = useState<number | null>(null)
   const [ansicht, setAnsicht] = useState<Ansicht>(ANSICHT_START)
+  /**
+   * Der Ausschnitt, der gerade scharf vorliegt - in Buehnenkoordinaten, samt
+   * der Aufloesung, in der er gezeichnet wurde. Als Zustand, weil das Canvas
+   * danach im Baum positioniert wird.
+   */
+  const [scharf, setScharf] = useState<{ fenster: Rechteck; massstab: number } | null>(null)
 
   /**
    * Seitengroesze und Einpassmaszstab zusaetzlich als Ref.
@@ -136,67 +154,141 @@ export function PdfViewer({
      Zeichnen
      --------------------------------------------------------------------- */
 
-  /** Maszstab, in dem das Bitmap zuletzt entstanden ist. */
-  const gezeichnetRef = useRef<number | null>(null)
+  /** Maszstab, in dem die Grundebene vorliegt (Bildpunkte je Buehnenpunkt). */
+  const grundRef = useRef<number | null>(null)
+  /** Dasselbe fuer die Scharfebene - als Ref, weil der Zeitgeber es liest. */
+  const scharfRef = useRef<{ fenster: Rechteck; massstab: number } | null>(null)
   const schaerfenRef = useRef<number | null>(null)
 
-  const zeichne = useCallback(async (zeichenMassstab: number) => {
+  /**
+   * Die ganze Seite in der Aufloesung, die bei 100 % gebraucht wird.
+   *
+   * Sie ist damit nie groeszer als die Zeichenflaeche selbst und kostet immer
+   * gleich viel. Bei starkem Zoom ist sie unscharf - dafuer liegt sie sofort
+   * vor, sodass beim Schwenken kein weiszes Loch entsteht.
+   */
+  const zeichneGrund = useCallback(async (buehne: Masze, blattMassstab: number, dichte: number) => {
     const pdf = pdfDocRef.current
-    const canvas = canvasRef.current
-    if (!pdf || !canvas) return
+    const canvas = grundCanvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!pdf || !canvas || !context) return
 
-    renderTaskRef.current?.cancel()
+    grundTaskRef.current?.cancel()
 
     const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale: zeichenMassstab })
-    const context = canvas.getContext('2d')
-    if (!context) return
-
-    canvas.width = Math.round(viewport.width)
-    canvas.height = Math.round(viewport.height)
+    const viewport = page.getViewport({ scale: blattMassstab * dichte })
+    canvas.width = Math.round(buehne.breite * dichte)
+    canvas.height = Math.round(buehne.hoehe * dichte)
 
     const task = page.render({ canvasContext: context, viewport, canvas })
-    renderTaskRef.current = task
+    grundTaskRef.current = task
     try {
       await task.promise
-      gezeichnetRef.current = zeichenMassstab
+      grundRef.current = dichte
     } catch (err) {
       if ((err as { name?: string })?.name !== 'RenderingCancelledException') throw err
     } finally {
-      if (renderTaskRef.current === task) renderTaskRef.current = null
+      if (grundTaskRef.current === task) grundTaskRef.current = null
     }
   }, [])
 
   /**
-   * Schaerft nach, sobald die Geste steht.
+   * Nur der sichtbare Ausschnitt, dafuer punktgenau.
    *
-   * Bis dahin skaliert der Browser das vorhandene Bitmap - man sieht also
-   * sofort etwas, es wird nur kurz weich. Vorher aenderte sich waehrend der
-   * Wartezeit gar nichts und dann alles auf einmal.
+   * `transform` verschiebt die Zeichnung so, dass die linke obere Ecke des
+   * Ausschnitts auf dem Canvas bei (0,0) landet. Das ist der Weg, mit dem
+   * pdf.js einen Teilbereich zeichnet, ohne die ganze Seite aufzubauen.
+   *
+   * Ein Buehnenpunkt entspricht auf dem Bildschirm `zoom` CSS-Punkten, also
+   * `zoom * dichte` Geraetepunkten. Genau so viele Bildpunkte bekommt er hier -
+   * deshalb ist das Ergebnis bei jedem Maszstab scharf.
+   */
+  const zeichneScharf = useCallback(
+    async (fenster: Rechteck, blattMassstab: number, massstab: number) => {
+      const pdf = pdfDocRef.current
+      const canvas = scharfCanvasRef.current
+      const context = canvas?.getContext('2d')
+      if (!pdf || !canvas || !context) return
+      if (fenster.breite <= 0 || fenster.hoehe <= 0) return
+
+      scharfTaskRef.current?.cancel()
+
+      const page = await pdf.getPage(1)
+      const viewport = page.getViewport({ scale: blattMassstab * massstab })
+      canvas.width = Math.round(fenster.breite * massstab)
+      canvas.height = Math.round(fenster.hoehe * massstab)
+
+      const task = page.render({
+        canvasContext: context,
+        viewport,
+        canvas,
+        transform: [1, 0, 0, 1, -fenster.x * massstab, -fenster.y * massstab],
+      })
+      scharfTaskRef.current = task
+      try {
+        await task.promise
+        scharfRef.current = { fenster, massstab }
+        setScharf({ fenster, massstab })
+      } catch (err) {
+        if ((err as { name?: string })?.name !== 'RenderingCancelledException') throw err
+      } finally {
+        if (scharfTaskRef.current === task) scharfTaskRef.current = null
+      }
+    },
+    []
+  )
+
+  /** Grundebene: einmal je Plan und je Groeszenaenderung der Flaeche. */
+  useEffect(() => {
+    if (!seite || !einpass) return
+    const dichte = geraeteDichte(window.devicePixelRatio)
+    void zeichneGrund({ breite: seite.breite * einpass, hoehe: seite.hoehe * einpass }, einpass, dichte)
+  }, [seite, einpass, zeichneGrund])
+
+  /**
+   * Scharfebene: sobald die Geste steht.
+   *
+   * Bis dahin bleibt der vorhandene Ausschnitt an seinem Platz und wird
+   * mitskaliert - man sieht also durchgehend etwas, es wird nur kurz weich.
+   *
+   * Ausgeloest von jeder Aenderung der Ansicht, also auch vom Schwenken:
+   * anders als die Aufloesung haengt der *Ausschnitt* sehr wohl davon ab.
    */
   useEffect(() => {
     if (!seite || !einpass) return
-    const dichte = window.devicePixelRatio || 1
-    const ziel = berechneZeichenMassstab(seite, einpass, ansicht.zoom, dichte)
-    if (gezeichnetRef.current !== null && Math.abs(gezeichnetRef.current - ziel) < 0.0005) return
+    const buehne = { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass }
+    const flaeche = flaechenMasze()
+    if (!flaeche || flaeche.breite <= 0) return
 
-    // Beim ersten Bild sofort - sonst saehe man beim Oeffnen eines Plans
-    // erst einmal eine leere Flaeche. Gewartet wird nur beim Nachschaerfen,
-    // wo ja bereits ein Bild steht.
-    if (gezeichnetRef.current === null) {
-      void zeichne(ziel)
+    const dichte = geraeteDichte(window.devicePixelRatio)
+    const mitRand = berechneSichtfenster(ansicht, buehne, flaeche)
+    const wunsch = berechneScharfMassstab(ansicht.zoom, dichte, mitRand)
+
+    // Nichts tun, wenn der vorhandene Ausschnitt das Sichtbare noch abdeckt
+    // *und* fein genug ist. Ohne diese Pruefung zeichnete jede Verschiebung um
+    // einen Punkt die ganze Flaeche neu - dafuer ist der Rand ja da.
+    const vorhanden = scharfRef.current
+    const ohneRand = berechneSichtfenster(ansicht, buehne, flaeche, 0)
+    if (
+      vorhanden &&
+      liegtDrin(ohneRand, vorhanden.fenster) &&
+      vorhanden.massstab >= wunsch * 0.98
+    ) {
       return
     }
 
+    // Beim ersten Ausschnitt sofort: sonst saehe man den Plan zwar, aber
+    // 150 ms lang nur in der groben Grundebene.
+    const verzoegerung = vorhanden ? NACHSCHAERFEN_MS : 0
     if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
     schaerfenRef.current = window.setTimeout(() => {
-      void zeichne(ziel)
-    }, NACHSCHAERFEN_MS)
+      void zeichneScharf(mitRand, einpass, wunsch)
+    }, verzoegerung)
 
     return () => {
       if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
     }
-  }, [seite, einpass, ansicht.zoom, zeichne])
+  }, [seite, einpass, ansicht, zeichneScharf])
 
   /* ---------------------------------------------------------------------
      Laden
@@ -209,7 +301,9 @@ export function PdfViewer({
     setEinpass(null)
     seiteRef.current = null
     einpassRef.current = null
-    gezeichnetRef.current = null
+    grundRef.current = null
+    scharfRef.current = null
+    setScharf(null)
     setAnsicht(ANSICHT_START)
 
     async function lade() {
@@ -253,8 +347,10 @@ export function PdfViewer({
       // Erst abbrechen, dann freigeben: `destroy` waehrend einer laufenden
       // Zeichnung bricht mit einer Ausnahme ab. Ohne das Freigeben bleibt bei
       // jedem Planwechsel ein Dokument samt Arbeiter im Speicher zurueck.
-      renderTaskRef.current?.cancel()
-      renderTaskRef.current = null
+      grundTaskRef.current?.cancel()
+      scharfTaskRef.current?.cancel()
+      grundTaskRef.current = null
+      scharfTaskRef.current = null
       pdfDocRef.current = null
       const auftrag = ladeAuftragRef.current
       ladeAuftragRef.current = null
@@ -564,7 +660,25 @@ export function PdfViewer({
             transform: `translate(${ansicht.x}px, ${ansicht.y}px) scale(${ansicht.zoom})`,
           }}
         >
-          <canvas ref={canvasRef} className="plan-blatt" />
+          {/* Grundebene: die ganze Seite, bei starkem Zoom unscharf. */}
+          <canvas ref={grundCanvasRef} className="plan-blatt-grund" />
+          {/* Scharfebene darueber, nur der sichtbare Ausschnitt. Sie liegt in
+              Buehnenkoordinaten, wird also von derselben Transformation
+              bewegt und sitzt beim Schwenken sofort an der richtigen Stelle. */}
+          <canvas
+            ref={scharfCanvasRef}
+            className="plan-blatt-scharf"
+            style={
+              scharf
+                ? {
+                    left: scharf.fenster.x,
+                    top: scharf.fenster.y,
+                    width: scharf.fenster.breite,
+                    height: scharf.fenster.hoehe,
+                  }
+                : { display: 'none' }
+            }
+          />
           {points.map((point) => {
             const category = point.category_id ? categoryById.get(point.category_id) : undefined
             const color = category?.color ?? FALLBACK_COLOR

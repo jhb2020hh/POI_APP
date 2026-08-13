@@ -779,10 +779,17 @@ textarea {
   box-shadow: var(--shadow-sm);
 }
 
-.plan-blatt {
+/* Grundebene: deckt die ganze Buehne ab. */
+.plan-blatt-grund {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* Scharfebene: Lage und Groesze kommen aus dem Baustein, weil sie vom gerade
+   sichtbaren Ausschnitt abhaengen. */
+.plan-blatt-scharf {
+  position: absolute;
 }
 
 .plan-pin {

@@ -153,28 +153,115 @@ export function radZuFaktor(delta: number, deltaMode = 0): number {
   return Math.exp(-begrenzt * 0.0075)
 }
 
+/* -------------------------------------------------------------------------
+   Aufloesung
+   -------------------------------------------------------------------------
+   Der entscheidende Punkt: gezeichnet wird nicht die ganze Seite, sondern nur
+   der sichtbare Ausschnitt.
+
+   Die ganze Seite in voller Aufloesung ginge gar nicht. Ein A1-Plan bei 800 %
+   auf einem Bildschirm mit doppelter Punktdichte braeuchte rund 24000 x 17000
+   Bildpunkte - vierhundert Millionen, also etwa 1,6 GB. Kein Browser gibt das
+   her; er liefert dann eine leere Flaeche. Der frueher hier stehende Deckel
+   von 8192 Punkten je Kante verhinderte das zwar, aber um den Preis, dass bei
+   starkem Zoom nur noch mit einem Bruchteil der noetigen Aufloesung gezeichnet
+   wurde - sichtbar als grobe Kloetzchen.
+
+   Beschraenkt man sich auf den Ausschnitt, faellt das Problem weg: der wird
+   nie groeszer als der Bildschirm, egal wie weit man hineinzoomt. Der Bedarf
+   bleibt damit *unabhaengig vom Zoom* konstant, und die Darstellung ist bei
+   jedem Maszstab punktgenau.
+   ------------------------------------------------------------------------- */
+
+/** Ein Ausschnitt der Buehne, in Buehnenkoordinaten. */
+export interface Rechteck {
+  x: number
+  y: number
+  breite: number
+  hoehe: number
+}
+
 /**
- * Aufloesung, in der pdf.js zeichnen soll.
+ * Mehr als der Bildschirm zeigt, damit kleine Verschiebungen nicht sofort ein
+ * Neuzeichnen ausloesen. Anteil der sichtbaren Groesze je Seite.
+ */
+export const SICHTFENSTER_RAND = 0.2
+
+/**
+ * Der Teil der Buehne, der zu sehen ist - mit Rand und auf die Seite begrenzt.
  *
- * Beruecksichtigt die Bildpunktdichte des Geraetes - vorher fehlte sie ganz,
- * weshalb der Plan auf jedem heutigen Notebook weich aussah.
- *
- * Der Deckel ist noetig, weil Browser die Kantenlaenge eines Canvas begrenzen.
- * Wird er ueberschritten, liefert pdf.js eine *leere* Flaeche. Deshalb wird
- * lieber der Zeichenmaszstab beschnitten: dann wird die Ansicht bei extremem
- * Zoom weich statt leer.
+ * Umkehrung der Darstellungsrechnung: ein Punkt p der Flaeche liegt auf der
+ * Buehne bei (p - verschiebung) / zoom.
+ */
+export function berechneSichtfenster(
+  ansicht: Ansicht,
+  buehne: Masze,
+  flaeche: Masze,
+  randAnteil = SICHTFENSTER_RAND
+): Rechteck {
+  const sichtbareBreite = flaeche.breite / ansicht.zoom
+  const sichtbareHoehe = flaeche.hoehe / ansicht.zoom
+  const linkeKante = -ansicht.x / ansicht.zoom
+  const obereKante = -ansicht.y / ansicht.zoom
+
+  const links = Math.max(0, linkeKante - sichtbareBreite * randAnteil)
+  const oben = Math.max(0, obereKante - sichtbareHoehe * randAnteil)
+  const rechts = Math.min(buehne.breite, linkeKante + sichtbareBreite * (1 + randAnteil))
+  const unten = Math.min(buehne.hoehe, obereKante + sichtbareHoehe * (1 + randAnteil))
+
+  return {
+    x: links,
+    y: oben,
+    breite: Math.max(0, rechts - links),
+    hoehe: Math.max(0, unten - oben),
+  }
+}
+
+/** Liegt `innen` vollstaendig in `auszen`? */
+export function liegtDrin(innen: Rechteck, auszen: Rechteck, toleranz = 0.5): boolean {
+  return (
+    innen.x >= auszen.x - toleranz &&
+    innen.y >= auszen.y - toleranz &&
+    innen.x + innen.breite <= auszen.x + auszen.breite + toleranz &&
+    innen.y + innen.hoehe <= auszen.y + auszen.hoehe + toleranz
+  )
+}
+
+/**
+ * Mehr als die doppelte Punktdichte bringt dem Auge nichts mehr, kostet aber
+ * das Vierfache an Speicher. Manche Geraete melden 3 oder 4.
+ */
+export const DICHTE_MAX = 2
+
+export function geraeteDichte(gemeldet: number | undefined): number {
+  if (!gemeldet || !Number.isFinite(gemeldet) || gemeldet < 1) return 1
+  return Math.min(DICHTE_MAX, gemeldet)
+}
+
+/**
+ * Grenzen, die Browser fuer ein Canvas setzen. Die Flaechengrenze ist die
+ * wirksamere: 32 Millionen Punkte sind rund 128 MB. Beide greifen bei der
+ * Ausschnittzeichnung praktisch nie - sie stehen als Sicherung fuer sehr
+ * grosze Bildschirme.
  */
 export const CANVAS_KANTE_MAX = 8192
+export const CANVAS_FLAECHE_MAX = 32_000_000
 
-export function berechneZeichenMassstab(
-  seite: Masze,
-  einpassMassstab: number,
+/**
+ * Bildpunkte des Canvas je Buehnenpunkt.
+ *
+ * Angestrebt wird `zoom * dichte`: dann entspricht ein Bildpunkt des Canvas
+ * genau einem Bildpunkt des Geraets. Nur wenn das die Grenzen sprengt, wird
+ * gekuerzt - dann ist die Ansicht weich statt leer.
+ */
+export function berechneScharfMassstab(
   zoom: number,
-  bildpunktdichte: number
+  dichte: number,
+  fenster: Masze
 ): number {
-  const gewuenscht = einpassMassstab * zoom * bildpunktdichte
-  const groessereKante = Math.max(seite.breite, seite.hoehe)
-  if (groessereKante <= 0) return gewuenscht
-  const hoechster = CANVAS_KANTE_MAX / groessereKante
-  return Math.min(gewuenscht, hoechster)
+  const gewuenscht = zoom * dichte
+  if (fenster.breite <= 0 || fenster.hoehe <= 0) return gewuenscht
+  const nachKante = CANVAS_KANTE_MAX / Math.max(fenster.breite, fenster.hoehe)
+  const nachFlaeche = Math.sqrt(CANVAS_FLAECHE_MAX / (fenster.breite * fenster.hoehe))
+  return Math.min(gewuenscht, nachKante, nachFlaeche)
 }

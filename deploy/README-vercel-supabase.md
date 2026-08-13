@@ -287,11 +287,12 @@ Der Betrachter hat zwei Ebenen, und diese Trennung ist der Grund, warum sich
 Zoomen und Schwenken flüssig anfühlen:
 
 ```
-.plan-flaeche    der sichtbare Ausschnitt, fängt alle Eingaben ab
-  .plan-buehne   feste CSS-Größe (Seite im Einpassmaßstab),
-                 bewegt wird sie über transform
-    <canvas>     dieselbe CSS-Größe, Bitmap in der Auflösung des Zooms
-    Nadeln       in Prozent, gegen den Zoom skaliert
+.plan-flaeche      der sichtbare Ausschnitt, fängt alle Eingaben ab
+  .plan-buehne     feste CSS-Größe (Seite im Einpassmaßstab),
+                   bewegt wird sie über transform
+    Grundebene     die ganze Seite in der Auflösung für 100 %
+    Scharfebene    nur der sichtbare Ausschnitt, punktgenau
+    Nadeln         in Prozent, gegen den Zoom skaliert
 ```
 
 Sehen ist eine CSS-Transformation und wirkt sofort. Geschärft wird erst
@@ -303,6 +304,34 @@ Vorher trug eine Größe beides: sie bestimmte den Anblick **und** die Auflösun
 des Canvas. Deshalb hing jede Bewegung am Neuzeichnen, das Layout änderte sich
 dabei, und der Ausschnitt sprang.
 
+### Warum zwei Ebenen und nicht eine
+
+**Die ganze Seite in voller Auflösung geht nicht.** Ein A1-Plan bei 800 % auf
+einem Bildschirm mit doppelter Punktdichte bräuchte rund 24 000 × 17 000
+Bildpunkte — vierhundert Millionen, etwa 1,6 GB. Kein Browser gibt das her; er
+liefert dann eine leere Fläche.
+
+Deshalb zeichnet die **Scharfebene** nur den sichtbaren Ausschnitt, mit 20 %
+Rand. Der ist nie größer als der Bildschirm, egal wie weit man hineinzoomt —
+der Bedarf bleibt damit unabhängig vom Zoom konstant bei etwa 3900 × 2400
+Bildpunkten. pdf.js zeichnet ihn über den Parameter `transform`, der die
+Zeichnung so verschiebt, dass die linke obere Ecke des Ausschnitts auf dem
+Canvas bei (0,0) landet.
+
+Die **Grundebene** darunter ist die ganze Seite in der Auflösung für 100 %.
+Bei starkem Zoom ist sie unscharf, liegt aber immer sofort vor — beim Schwenken
+entsteht deshalb kein weißes Loch, solange die Scharfebene nachzieht.
+
+Der Zwischenstand ohne Scharfebene wäre nicht tragbar gewesen: dort wurde die
+ganze Seite gezeichnet und bei Überschreiten der Canvas-Grenze der Maßstab
+gekürzt. Bei 800 % blieben davon rund 43 % der nötigen Auflösung übrig —
+sichtbar als grobe Klötzchen.
+
+Dass `transform` genau den gemeinten Ausschnitt liefert, ist im Browser gegen
+eine Vollauflösung geprüft worden: von 800 000 verglichenen Farbwerten wich
+**keiner** ab, während dieselbe Prüfung ohne `transform` in 585 042 Werten
+abweicht. Die Zusage gilt also nicht bloß laut Dokumentation.
+
 Die Rechnung dazu steht in `packages/frontend/src/utils/planAnsicht.ts` — ohne
 jeden Zugriff auf das Dokument, damit sie prüfbar bleibt:
 
@@ -313,8 +342,13 @@ npm run diagnose:ansicht
 Prüft ohne Browser, dass der Punkt unter dem Zeiger beim Zoomen stehen bleibt,
 dass zehnmal hinein und heraus wieder bei 100 % landet, dass sich der Plan
 nicht aus dem Bild schieben lässt, dass Rad- und Trackpad-Ausschläge
-gleichwertig umgerechnet werden und dass das Bitmap unter der Canvas-Grenze der
-Browser bleibt.
+gleichwertig umgerechnet werden, dass das Sichtfenster das Sichtbare stets
+vollständig abdeckt und dass in jedem Maßstab punktgenau gezeichnet wird.
+
+Eine Einschränkung, die kein Fehler ist: solange die Seite schmaler als die
+Zeichenfläche ist, wird sie mittig gestellt — dort kann der Punkt unter dem
+Zeiger nicht zusätzlich festgehalten werden. Sobald die Seite breiter als die
+Fläche ist, stimmt es auf fünf Nachkommastellen.
 
 **Mehrseitige PDFs werden nicht unterstützt.** Angezeigt wird Seite 1, und neue
 Tickets werden mit `page_number = 1` geschrieben. Hat ein Plan mehr Seiten,

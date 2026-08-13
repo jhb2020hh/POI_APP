@@ -11,14 +11,19 @@
  */
 import {
   ANSICHT_START,
+  CANVAS_FLAECHE_MAX,
+  CANVAS_KANTE_MAX,
+  DICHTE_MAX,
   ZOOM_MAX,
   ZOOM_MIN,
   ZOOM_STUFE,
   begrenzeVerschiebung,
   begrenzeZoom,
   berechneEinpassung,
-  berechneZeichenMassstab,
-  CANVAS_KANTE_MAX,
+  berechneScharfMassstab,
+  berechneSichtfenster,
+  geraeteDichte,
+  liegtDrin,
   radZuFaktor,
   zoomeAufPunkt,
   type Ansicht,
@@ -186,19 +191,97 @@ melde(
 melde(radZuFaktor(-5000) === radZuFaktor(-120), 'Ausreiszer werden gedeckelt')
 
 console.log('')
-console.log('6. Aufloesung des Bitmaps')
+console.log('6. Sichtfenster')
 
-melde(
-  gleich(berechneZeichenMassstab(SEITE, 0.5, 2, 2), 2, 0.0001),
-  'Einpassmaszstab, Zoom und Bildpunktdichte gehen ein',
-  `${berechneZeichenMassstab(SEITE, 0.5, 2, 2)}`
+// Ganz herausgezoomt und mittig: das Fenster ist die ganze Seite. Ein Rand
+// darueber hinaus waere sinnlos, es gibt dort nichts zu zeichnen.
+const ganzeSeite = berechneSichtfenster(
+  begrenzeVerschiebung(ANSICHT_START, buehne, FLAECHE),
+  buehne,
+  FLAECHE
 )
-const extrem = berechneZeichenMassstab(SEITE, 0.5, ZOOM_MAX, 3)
 melde(
-  SEITE.breite * extrem <= CANVAS_KANTE_MAX + 0.5,
-  'bei extremem Zoom bleibt das Bitmap unter der Browsergrenze',
-  `${(SEITE.breite * extrem).toFixed(0)} > ${CANVAS_KANTE_MAX}`
+  gleich(ganzeSeite.x, 0) &&
+    gleich(ganzeSeite.y, 0) &&
+    gleich(ganzeSeite.breite, buehne.breite) &&
+    gleich(ganzeSeite.hoehe, buehne.hoehe),
+  'bei 100 % umfasst das Fenster genau die Seite',
+  `${ganzeSeite.x.toFixed(1)}/${ganzeSeite.y.toFixed(1)} ${ganzeSeite.breite.toFixed(1)}x${ganzeSeite.hoehe.toFixed(1)}`
 )
+
+// Hineingezoomt: das Fenster muss kleiner als die Seite werden - sonst waere
+// nichts gewonnen und das Bitmap wieder unbezahlbar grosz.
+const tief: Ansicht = begrenzeVerschiebung({ zoom: 8, x: -2000, y: -1500 }, buehne, FLAECHE)
+const fensterTief = berechneSichtfenster(tief, buehne, FLAECHE)
+melde(
+  fensterTief.breite < buehne.breite * 0.3 && fensterTief.hoehe < buehne.hoehe * 0.4,
+  'bei 800 % deckt das Fenster nur einen kleinen Teil der Seite ab',
+  `${fensterTief.breite.toFixed(1)}x${fensterTief.hoehe.toFixed(1)} von ${buehne.breite.toFixed(1)}x${buehne.hoehe.toFixed(1)}`
+)
+
+// Das eigentlich Sichtbare muss vollstaendig im gezeichneten Bereich liegen -
+// sonst blitzt beim Schwenken ein ungezeichneter Streifen auf.
+const sichtbarTief = berechneSichtfenster(tief, buehne, FLAECHE, 0)
+melde(
+  liegtDrin(sichtbarTief, fensterTief),
+  'das Sichtbare liegt vollstaendig im gezeichneten Bereich',
+  `${JSON.stringify(sichtbarTief)} nicht in ${JSON.stringify(fensterTief)}`
+)
+
+// Und der Rand muss auch etwas bringen: eine kleine Verschiebung darf nicht
+// sofort ein Neuzeichnen ausloesen.
+const etwasVerschoben = begrenzeVerschiebung({ zoom: 8, x: tief.x - 30, y: tief.y - 30 }, buehne, FLAECHE)
+melde(
+  liegtDrin(berechneSichtfenster(etwasVerschoben, buehne, FLAECHE, 0), fensterTief),
+  'nach 30 Punkten Verschiebung reicht der gezeichnete Bereich noch',
+  'der Rand ist zu knapp'
+)
+
+// Am Seitenrand darf das Fenster nicht ueber das Blatt hinausragen: ein
+// negativer Versatz zeichnete sonst ins Leere.
+const amRand = berechneSichtfenster({ zoom: 8, x: 0, y: 0 }, buehne, FLAECHE)
+melde(
+  amRand.x >= 0 && amRand.y >= 0 && amRand.x + amRand.breite <= buehne.breite + 0.001,
+  'am Seitenrand bleibt das Fenster auf dem Blatt',
+  `${amRand.x}/${amRand.y} + ${amRand.breite}`
+)
+
+console.log('')
+console.log('7. Aufloesung des Ausschnitts')
+
+melde(gleich(geraeteDichte(3), DICHTE_MAX), 'ueberhohe Punktdichte wird gedeckelt', `${geraeteDichte(3)}`)
+melde(gleich(geraeteDichte(undefined), 1), 'fehlende Punktdichte ergibt 1')
+melde(gleich(geraeteDichte(2), 2), 'doppelte Punktdichte bleibt erhalten')
+
+// Der springende Punkt: ein Buehnenpunkt bekommt zoom * dichte Bildpunkte -
+// damit entspricht ein Bildpunkt genau einem Geraetepunkt. Frueher wurde die
+// ganze Seite gezeichnet und deshalb bei 800 % auf ein Drittel gekuerzt.
+for (const zoom of [1, 2, 4, ZOOM_MAX]) {
+  const stelle = begrenzeVerschiebung(
+    { zoom, x: -buehne.breite * zoom * 0.3, y: -buehne.hoehe * zoom * 0.3 },
+    buehne,
+    FLAECHE
+  )
+  const fenster = berechneSichtfenster(stelle, buehne, FLAECHE)
+  const massstab = berechneScharfMassstab(zoom, 2, fenster)
+  melde(
+    gleich(massstab, zoom * 2, 0.0001),
+    `bei ${zoom * 100} % wird punktgenau gezeichnet`,
+    `${massstab.toFixed(3)} statt ${(zoom * 2).toFixed(3)}`
+  )
+  const kante = Math.max(fenster.breite, fenster.hoehe) * massstab
+  melde(
+    kante <= CANVAS_KANTE_MAX + 0.5 &&
+      fenster.breite * massstab * fenster.hoehe * massstab <= CANVAS_FLAECHE_MAX + 1,
+    `  und bleibt dabei innerhalb der Browsergrenzen (${Math.round(kante)} px Kante)`,
+    `${Math.round(kante)} px`
+  )
+}
+
+// Gegenprobe: waere das Fenster so grosz wie eine ganze A0-Seite bei 800 %,
+// muesste gekuerzt werden. Genau dieser Fall trat vorher bei *jedem* Zoom ein.
+const uebergrosz = berechneScharfMassstab(8, 2, { breite: 3370, hoehe: 2384 })
+melde(uebergrosz < 16, 'ein uebergroszes Fenster wird gekuerzt statt leer geliefert', `${uebergrosz}`)
 
 console.log('')
 console.log(allesOk ? 'Ergebnis: alles in Ordnung.' : 'Ergebnis: es gibt Abweichungen.')
