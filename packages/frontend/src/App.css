@@ -1808,6 +1808,32 @@ textarea {
   white-space: nowrap;
 }
 
+.pdf-zoom-hinweis-fehler {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* Blendet sich erst nach zwei Sekunden ein. Im Normalfall ist das Schaerfen
+   nach einem Wimpernschlag durch und die Anzeige bleibt unsichtbar; bleibt sie
+   stehen, hakt etwas - und man sieht es, statt nur einen unscharfen Plan vor
+   sich zu haben. Bewusst ohne Zeitgeber im Code geloest. */
+.pdf-zoom-hinweis-laeuft {
+  opacity: 0;
+  animation: hinweis-einblenden 0.2s linear 2s forwards;
+}
+
+@keyframes hinweis-einblenden {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-zoom-hinweis-laeuft {
+    animation-duration: 0.01s;
+  }
+}
+
 .pdf-zoom-toolbar {
   position: absolute;
   top: 8px;

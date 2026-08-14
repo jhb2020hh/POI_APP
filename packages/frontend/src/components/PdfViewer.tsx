@@ -41,6 +41,79 @@ const TIPP_HOECHSTDAUER_MS = 600
 /** Ruhe nach der Geste, bevor pdf.js scharf nachzeichnet. */
 const NACHSCHAERFEN_MS = 150
 
+/** Wartezeit vor dem einen erlaubten zweiten Versuch. */
+const ZWEITER_VERSUCH_MS = 400
+
+/**
+ * Haelt die Zeichenauftraege *einer* Ebene auseinander.
+ *
+ * Der Grund ist ein nachgestellter Fehler und keine Vorsichtsmasznahme: in
+ * `zeichneScharf` lag zwischen dem Abbrechen des vorigen Auftrags und dem
+ * Zeichnen ein `await pdf.getPage(1)`. Zwei Aufrufe konnten sich darueber
+ * verschraenken - der zweite brach nichts ab, weil der erste seinen Auftrag
+ * noch gar nicht eingetragen hatte. Danach zeichneten beide auf dasselbe
+ * Canvas, was pdf.js ausdruecklich verbietet:
+ *
+ *   "Cannot use the same canvas during multiple render() operations."
+ *
+ * Der Fehler entstand asynchron, war keine RenderingCancelledException und
+ * wurde deshalb weitergeworfen - in ein `void zeichneScharf(...)` hinein. Er
+ * verschwand also lautlos, und die Scharfebene blieb auf dem alten Stand
+ * stehen: der Plan wurde beim Zoomen nicht mehr scharf.
+ *
+ * Wie oft das zuschlaegt, haengt daran, wie lange `getPage` braucht. Bei einem
+ * frisch hochgeladenen Plan ist das Dokument noch nirgends zwischengespeichert
+ * und die Wartezeit lang - dieselbe Datei war deshalb einmal scharf und einmal
+ * nicht.
+ *
+ * Hier wird jeder Auftrag mit einer Marke versehen. Ein neuer Auftrag bricht
+ * den laufenden ab, wartet dessen *tatsaechliches* Ende ab und steigt aus,
+ * falls er inzwischen selbst ueberholt wurde. Erst danach wird ein Canvas
+ * angefasst.
+ */
+interface Zeichenschlange {
+  marke: number
+  laufend: RenderTask | null
+  fertig: Promise<void>
+}
+
+function neueSchlange(): Zeichenschlange {
+  return { marke: 0, laufend: null, fertig: Promise.resolve() }
+}
+
+async function reiheEin(
+  schlange: Zeichenschlange,
+  auftrag: (istAktuell: () => boolean, setzeLaufend: (t: RenderTask) => void) => Promise<void>
+): Promise<void> {
+  const meine = ++schlange.marke
+  schlange.laufend?.cancel()
+
+  const vorher = schlange.fertig
+  let melde: () => void = () => {}
+  schlange.fertig = new Promise<void>((r) => (melde = r))
+
+  try {
+    // Nicht nur abbrechen, sondern das Ende abwarten: pdf.js traegt das Canvas
+    // erst dann wieder aus seinem Verzeichnis aus.
+    await vorher
+    if (meine !== schlange.marke) return
+    await auftrag(
+      () => meine === schlange.marke,
+      (t) => {
+        schlange.laufend = t
+      }
+    )
+  } finally {
+    if (schlange.laufend && meine === schlange.marke) schlange.laufend = null
+    melde()
+  }
+}
+
+/** Abbrueche sind der Normalfall und keine Stoerung. */
+function istAbbruch(fehler: unknown): boolean {
+  return (fehler as { name?: string })?.name === 'RenderingCancelledException'
+}
+
 /**
  * Die Planansicht.
  *
@@ -91,8 +164,10 @@ export function PdfViewer({
   const grundCanvasRef = useRef<HTMLCanvasElement>(null)
   const scharfCanvasRef = useRef<HTMLCanvasElement>(null)
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
-  const grundTaskRef = useRef<RenderTask | null>(null)
-  const scharfTaskRef = useRef<RenderTask | null>(null)
+  // Je Ebene eine Schlange: die beiden zeichnen auf verschiedene Canvas und
+  // duerfen deshalb nebeneinanderher laufen - nur je Ebene nicht.
+  const grundSchlange = useRef<Zeichenschlange>(neueSchlange())
+  const scharfSchlange = useRef<Zeichenschlange>(neueSchlange())
   /** Nur zum Freigeben - `destroy` haengt am Ladeauftrag, nicht am Dokument. */
   const ladeAuftragRef = useRef<PDFDocumentLoadingTask | null>(null)
 
@@ -109,6 +184,21 @@ export function PdfViewer({
    * danach im Baum positioniert wird.
    */
   const [scharf, setScharf] = useState<{ fenster: Rechteck; massstab: number } | null>(null)
+  /**
+   * Ein Zeichenfehler, der auch nach dem zweiten Versuch geblieben ist.
+   *
+   * Er wird angezeigt statt verschluckt. Genau daran lag es: der Fehler fiel in
+   * ein `void` und niemand erfuhr davon - der Plan blieb einfach unscharf.
+   */
+  const [zeichenFehler, setZeichenFehler] = useState<string | null>(null)
+  /**
+   * Ob die Scharfebene der aktuellen Ansicht hinterherhaengt.
+   *
+   * Normalerweise ein Wimpernschlag. Bleibt es dabei, stimmt etwas nicht - und
+   * genau das soll man sehen koennen. Die Anzeige blendet sich erst nach zwei
+   * Sekunden ein (rein ueber CSS), damit der Normalfall unsichtbar bleibt.
+   */
+  const [schaerfeLaeuft, setSchaerfeLaeuft] = useState(false)
 
   /**
    * Seitengroesze und Einpassmaszstab zusaetzlich als Ref.
@@ -156,8 +246,16 @@ export function PdfViewer({
 
   /** Maszstab, in dem die Grundebene vorliegt (Bildpunkte je Buehnenpunkt). */
   const grundRef = useRef<number | null>(null)
-  /** Dasselbe fuer die Scharfebene - als Ref, weil der Zeitgeber es liest. */
-  const scharfRef = useRef<{ fenster: Rechteck; massstab: number } | null>(null)
+  /**
+   * Dasselbe fuer die Scharfebene - als Ref, weil der Zeitgeber es liest.
+   *
+   * `einpass` gehoert mit hinein: `fenster` steht in Buehnenkoordinaten, und
+   * die bedeuten bei einem anderen Einpassmaszstab etwas anderes. Ohne diesen
+   * Vergleich koennte die Abkuerzung weiter unten nach dem Ein- oder
+   * Ausklappen einer Leiste faelschlich greifen und ein veraltetes Bild stehen
+   * lassen.
+   */
+  const scharfRef = useRef<{ fenster: Rechteck; massstab: number; einpass: number } | null>(null)
   const schaerfenRef = useRef<number | null>(null)
 
   /**
@@ -168,28 +266,28 @@ export function PdfViewer({
    * vor, sodass beim Schwenken kein weiszes Loch entsteht.
    */
   const zeichneGrund = useCallback(async (buehne: Masze, blattMassstab: number, dichte: number) => {
-    const pdf = pdfDocRef.current
-    const canvas = grundCanvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!pdf || !canvas || !context) return
+    await reiheEin(grundSchlange.current, async (istAktuell, setzeLaufend) => {
+      const pdf = pdfDocRef.current
+      const canvas = grundCanvasRef.current
+      const context = canvas?.getContext('2d')
+      if (!pdf || !canvas || !context) return
 
-    grundTaskRef.current?.cancel()
+      const page = await pdf.getPage(1)
+      if (!istAktuell()) return
 
-    const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale: blattMassstab * dichte })
-    canvas.width = Math.round(buehne.breite * dichte)
-    canvas.height = Math.round(buehne.hoehe * dichte)
+      const viewport = page.getViewport({ scale: blattMassstab * dichte })
+      canvas.width = Math.round(buehne.breite * dichte)
+      canvas.height = Math.round(buehne.hoehe * dichte)
 
-    const task = page.render({ canvasContext: context, viewport, canvas })
-    grundTaskRef.current = task
-    try {
-      await task.promise
-      grundRef.current = dichte
-    } catch (err) {
-      if ((err as { name?: string })?.name !== 'RenderingCancelledException') throw err
-    } finally {
-      if (grundTaskRef.current === task) grundTaskRef.current = null
-    }
+      const task = page.render({ canvasContext: context, viewport, canvas })
+      setzeLaufend(task)
+      try {
+        await task.promise
+        grundRef.current = dichte
+      } catch (err) {
+        if (!istAbbruch(err)) throw err
+      }
+    })
   }, [])
 
   /**
@@ -205,35 +303,38 @@ export function PdfViewer({
    */
   const zeichneScharf = useCallback(
     async (fenster: Rechteck, blattMassstab: number, massstab: number) => {
-      const pdf = pdfDocRef.current
-      const canvas = scharfCanvasRef.current
-      const context = canvas?.getContext('2d')
-      if (!pdf || !canvas || !context) return
       if (fenster.breite <= 0 || fenster.hoehe <= 0) return
 
-      scharfTaskRef.current?.cancel()
+      await reiheEin(scharfSchlange.current, async (istAktuell, setzeLaufend) => {
+        const pdf = pdfDocRef.current
+        const canvas = scharfCanvasRef.current
+        const context = canvas?.getContext('2d')
+        if (!pdf || !canvas || !context) return
 
-      const page = await pdf.getPage(1)
-      const viewport = page.getViewport({ scale: blattMassstab * massstab })
-      canvas.width = Math.round(fenster.breite * massstab)
-      canvas.height = Math.round(fenster.hoehe * massstab)
+        const page = await pdf.getPage(1)
+        if (!istAktuell()) return
 
-      const task = page.render({
-        canvasContext: context,
-        viewport,
-        canvas,
-        transform: [1, 0, 0, 1, -fenster.x * massstab, -fenster.y * massstab],
+        const viewport = page.getViewport({ scale: blattMassstab * massstab })
+        canvas.width = Math.round(fenster.breite * massstab)
+        canvas.height = Math.round(fenster.hoehe * massstab)
+
+        const task = page.render({
+          canvasContext: context,
+          viewport,
+          canvas,
+          transform: [1, 0, 0, 1, -fenster.x * massstab, -fenster.y * massstab],
+        })
+        setzeLaufend(task)
+        try {
+          await task.promise
+          scharfRef.current = { fenster, massstab, einpass: blattMassstab }
+          setScharf({ fenster, massstab })
+          setZeichenFehler(null)
+          setSchaerfeLaeuft(false)
+        } catch (err) {
+          if (!istAbbruch(err)) throw err
+        }
       })
-      scharfTaskRef.current = task
-      try {
-        await task.promise
-        scharfRef.current = { fenster, massstab }
-        setScharf({ fenster, massstab })
-      } catch (err) {
-        if ((err as { name?: string })?.name !== 'RenderingCancelledException') throw err
-      } finally {
-        if (scharfTaskRef.current === task) scharfTaskRef.current = null
-      }
     },
     []
   )
@@ -258,16 +359,23 @@ export function PdfViewer({
     if (!seite || !einpass) return
     const buehne = { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass }
     const flaeche = flaechenMasze()
-    if (!flaeche || flaeche.breite <= 0) return
+    // Beide Kanten pruefen. Vorher stand hier nur die Breite - bei einer
+    // Flaeche ohne Hoehe kam ein Ausschnitt der Hoehe null heraus, den
+    // zeichneScharf stillschweigend verwarf. Die Scharfebene waere dann nie
+    // entstanden, ohne dass irgendetwas darauf hingewiesen haette.
+    if (!flaeche || flaeche.breite <= 0 || flaeche.hoehe <= 0) return
 
     const dichte = geraeteDichte(window.devicePixelRatio)
     const mitRand = berechneSichtfenster(ansicht, buehne, flaeche)
     const wunsch = berechneScharfMassstab(ansicht.zoom, dichte, mitRand)
+    if (mitRand.breite <= 0 || mitRand.hoehe <= 0) return
 
     // Nichts tun, wenn der vorhandene Ausschnitt das Sichtbare noch abdeckt
     // *und* fein genug ist. Ohne diese Pruefung zeichnete jede Verschiebung um
     // einen Punkt die ganze Flaeche neu - dafuer ist der Rand ja da.
-    const vorhanden = scharfRef.current
+    // Der Merker gilt nur fuer denselben Einpassmaszstab - sonst stehen die
+    // Buehnenkoordinaten darin fuer etwas anderes.
+    const vorhanden = scharfRef.current?.einpass === einpass ? scharfRef.current : null
     const ohneRand = berechneSichtfenster(ansicht, buehne, flaeche, 0)
     if (
       vorhanden &&
@@ -280,15 +388,41 @@ export function PdfViewer({
     // Beim ersten Ausschnitt sofort: sonst saehe man den Plan zwar, aber
     // 150 ms lang nur in der groben Grundebene.
     const verzoegerung = vorhanden ? NACHSCHAERFEN_MS : 0
+    setSchaerfeLaeuft(true)
     if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
     schaerfenRef.current = window.setTimeout(() => {
-      void zeichneScharf(mitRand, einpass, wunsch)
+      schaerfenRef.current = null
+      zeichneScharf(mitRand, einpass, wunsch).catch(() => {
+        // Ein Versuch darf schiefgehen - danach wird es gemeldet statt
+        // verschluckt. Vorher endete jeder Fehler hier als unbeachtete
+        // Ablehnung und der Plan blieb stumm unscharf.
+        schaerfenRef.current = window.setTimeout(() => {
+          schaerfenRef.current = null
+          zeichneScharf(mitRand, einpass, wunsch).catch((err: unknown) => {
+            setZeichenFehler(err instanceof Error ? err.message : String(err))
+          })
+        }, ZWEITER_VERSUCH_MS)
+      })
     }, verzoegerung)
 
+    // Bewusst keine Aufraeumfunktion: sie liefe auch dann, wenn der naechste
+    // Durchlauf den fruehen Ausgang nimmt - dann waere der Zeitgeber geloescht
+    // und nie neu gesetzt. Geloescht wird beim Neuplanen (oben) und beim
+    // Verlassen des Bausteins (weiter unten).
+  }, [seite, einpass, ansicht, zeichneScharf])
+
+  // Beim Verlassen: keinen Zeitgeber und keinen Zeichenauftrag hinterlassen.
+  useEffect(() => {
+    const grund = grundSchlange.current
+    const scharfS = scharfSchlange.current
     return () => {
       if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
+      grund.marke++
+      scharfS.marke++
+      grund.laufend?.cancel()
+      scharfS.laufend?.cancel()
     }
-  }, [seite, einpass, ansicht, zeichneScharf])
+  }, [])
 
   /* ---------------------------------------------------------------------
      Laden
@@ -296,6 +430,11 @@ export function PdfViewer({
 
   useEffect(() => {
     let abgebrochen = false
+    // Die beiden Schlangen wechseln nie ihre Identitaet; sie hier festzuhalten
+    // ist trotzdem richtig, weil die Aufraeumfunktion sonst erst spaeter auf
+    // `.current` zugreift.
+    const grundS = grundSchlange.current
+    const scharfS = scharfSchlange.current
     setError(null)
     setSeite(null)
     setEinpass(null)
@@ -304,6 +443,7 @@ export function PdfViewer({
     grundRef.current = null
     scharfRef.current = null
     setScharf(null)
+    setZeichenFehler(null)
     setAnsicht(ANSICHT_START)
 
     async function lade() {
@@ -347,10 +487,14 @@ export function PdfViewer({
       // Erst abbrechen, dann freigeben: `destroy` waehrend einer laufenden
       // Zeichnung bricht mit einer Ausnahme ab. Ohne das Freigeben bleibt bei
       // jedem Planwechsel ein Dokument samt Arbeiter im Speicher zurueck.
-      grundTaskRef.current?.cancel()
-      scharfTaskRef.current?.cancel()
-      grundTaskRef.current = null
-      scharfTaskRef.current = null
+      //
+      // Die Marke hochzuzaehlen ist dabei das Entscheidende: ein Auftrag, der
+      // gerade in getPage haengt, gilt danach als ueberholt und fasst kein
+      // Canvas mehr an.
+      grundS.marke++
+      scharfS.marke++
+      grundS.laufend?.cancel()
+      scharfS.laufend?.cancel()
       pdfDocRef.current = null
       const auftrag = ladeAuftragRef.current
       ladeAuftragRef.current = null
@@ -766,6 +910,18 @@ export function PdfViewer({
           <span className="pdf-zoom-hinweis" title="Mehrseitige Pläne werden nicht unterstützt">
             Seite 1 von {seitenzahl}
           </span>
+        )}
+        {/* Ohne diese Anzeige war der Fehlerfall unsichtbar: der Plan blieb
+            einfach unscharf, und nichts wies darauf hin, dass das Zeichnen
+            fehlgeschlagen war. */}
+        {zeichenFehler ? (
+          <span className="pdf-zoom-hinweis pdf-zoom-hinweis-fehler" title={zeichenFehler}>
+            Scharfzeichnen fehlgeschlagen
+          </span>
+        ) : (
+          schaerfeLaeuft && (
+            <span className="pdf-zoom-hinweis pdf-zoom-hinweis-laeuft">wird geschärft …</span>
+          )
         )}
       </div>
     </div>
