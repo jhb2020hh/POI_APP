@@ -98,6 +98,15 @@ export interface PlanDiagnose {
    * zwei Module, die einander brauchen, sind eine Falle fuer spaeter.
    */
   motor: 'pdfium' | 'pdfjs'
+  /**
+   * Welcher Betrachter gezeichnet hat.
+   *
+   * `neu` ist EmbedPDF mit eigener Zoom-, Schwenk- und Kachelrechnung, `alt`
+   * der selbstgebaute. Beide stehen nebeneinander, solange nicht entschieden
+   * ist, welcher taugt - und ohne diese Zeile waere aus einer Rueckmeldung
+   * nicht zu erkennen, welcher gemeint ist.
+   */
+  betrachter: 'neu' | 'alt'
   inhalt: Inhaltsbefund | null
   seite: Masze | null
   einpass: number | null
@@ -149,6 +158,20 @@ export function gezeichneteDpi(d: PlanDiagnose): number | null {
   return d.einpass * d.scharf.massstab * 72
 }
 
+/**
+ * Die Vergroeszerung in natuerlicher Groesze - fuer beide Betrachter.
+ *
+ * Der neue fuehrt `zoom` bereits so; der alte zaehlt in Vielfachen des
+ * Einpassens und muss damit multipliziert werden.
+ */
+function zeigeVergroeszerung(d: PlanDiagnose): string {
+  if (d.betrachter === 'neu') {
+    return `${(d.zoom * 100).toFixed(0)} % natürliche Größe`
+  }
+  if (!d.einpass) return '–'
+  return `${(d.zoom * d.einpass * 100).toFixed(0)} % natürliche Größe (Zoom ${zahl(d.zoom)} × Einpassmaßstab)`
+}
+
 function inhaltsZeilen(d: PlanDiagnose): string[] {
   if (!d.inhalt) return ['Inhalt       (noch nicht untersucht)']
   const i = d.inhalt
@@ -180,18 +203,28 @@ function inhaltsZeilen(d: PlanDiagnose): string[] {
 export function alsText(d: PlanDiagnose, jetzt: number): string {
   const zeilen = [
     `Stand        ${d.stand} · ${d.gebaut}`,
+    `Betrachter   ${d.betrachter === 'neu' ? 'neu (EmbedPDF)' : 'alt (selbstgebaut)'}`,
     `Motor        ${d.motor === 'pdfium' ? 'PDFium (WebAssembly)' : 'pdf.js'}`,
     `Browser      Punktdichte ${d.punktdichte} · Fläche ${masze(d.flaeche)}`,
     `Seite        ${masze(d.seite)} pt · Einpassmaßstab ${zahl(d.einpass, 4)}`,
-    // Beide Zaehlweisen nebeneinander: `zoom` zaehlt in Vielfachen des
-    // Einpassens, die Anzeige in natuerlicher Groesze. Dass beide einmal
-    // "800 %" hieszen und Verschiedenes meinten, hat eine Fehlersuche gekostet.
-    `Ansicht      ${
-      d.einpass ? `${(d.zoom * d.einpass * 100).toFixed(0)} % natürliche Größe` : '–'
-    } (Zoom ${zahl(d.zoom)} × Einpassmaßstab)`,
-    `             Verschiebung ${d.verschiebung.x.toFixed(0)} / ${d.verschiebung.y.toFixed(0)}${
-      d.zoomMax ? ` · Obergrenze ${(d.zoomMax * (d.einpass ?? 1) * 100).toFixed(0)} %` : ''
-    }`,
+    // Immer in natuerlicher Groesze - also so, wie Acrobat und jeder andere
+    // Betrachter zaehlt. Dass die Anwendung einmal "800 %" anzeigte und etwas
+    // anderes meinte als Acrobat unter "800 %", hat eine Fehlersuche gekostet.
+    //
+    // Die beiden Betrachter zaehlen intern verschieden: der neue fuehrt den
+    // Maszstab bereits in natuerlicher Groesze, der alte in Vielfachen des
+    // Einpassens. Deshalb die Fallunterscheidung - eine gemeinsame Formel
+    // waere fuer einen von beiden schlicht falsch.
+    `Ansicht      ${zeigeVergroeszerung(d)}`,
+    ...(d.betrachter === 'alt'
+      ? [
+          `             Verschiebung ${d.verschiebung.x.toFixed(0)} / ${d.verschiebung.y.toFixed(0)}${
+            d.zoomMax ? ` · Obergrenze ${(d.zoomMax * (d.einpass ?? 1) * 100).toFixed(0)} %` : ''
+          }`,
+        ]
+      : [
+          `             Obergrenze ${d.zoomMax ? `${(d.zoomMax * 100).toFixed(0)} %` : '–'} · Schwenken und Einpassen führt EmbedPDF`,
+        ]),
     '',
     ...inhaltsZeilen(d),
     '',

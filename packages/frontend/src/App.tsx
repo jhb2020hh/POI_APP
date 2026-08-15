@@ -42,7 +42,7 @@ import {
   type AttachmentWithPoint,
 } from './api/client'
 import { connectPlanSocket } from './api/socket'
-import { PdfViewer } from './components/PdfViewer'
+import { PlanAnsicht } from './components/PlanAnsicht'
 import { Dashboard } from './components/Dashboard'
 import { LoginForm } from './components/LoginForm'
 import { TicketList } from './components/TicketList'
@@ -966,7 +966,7 @@ function App() {
 
               <div className={`plan-workspace ${mobilAnsicht === 'plan' ? 'zeigt-plan' : 'zeigt-tickets'}`}>
                 <div className="plan-canvas-area">
-                  <PdfViewer
+                  <PlanAnsicht
                     fileUrl={planFileUrl(selectedPlanId)}
                     points={points}
                     categories={categories}

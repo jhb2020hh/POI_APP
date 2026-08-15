@@ -11,7 +11,17 @@
     "diagnose:ansicht": "tsx scripts/diagnoseAnsicht.ts"
   },
   "dependencies": {
+    "@embedpdf/core": "^2.15.0",
+    "@embedpdf/engines": "^2.15.0",
     "@embedpdf/pdfium": "^2.15.0",
+    "@embedpdf/plugin-document-manager": "^2.15.0",
+    "@embedpdf/plugin-interaction-manager": "^2.15.0",
+    "@embedpdf/plugin-pan": "^2.15.0",
+    "@embedpdf/plugin-render": "^2.15.0",
+    "@embedpdf/plugin-scroll": "^2.15.0",
+    "@embedpdf/plugin-tiling": "^2.15.0",
+    "@embedpdf/plugin-viewport": "^2.15.0",
+    "@embedpdf/plugin-zoom": "^2.15.0",
     "@poi-app/shared": "*",
     "@supabase/supabase-js": "^2.58.0",
     "exifr": "^7.1.3",

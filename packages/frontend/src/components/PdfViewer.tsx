@@ -190,6 +190,8 @@ interface PdfViewerProps {
   onPointClick: (point: Point) => void
   /** Aus der Datenbank; der Motor weisz es genauer und hat Vorrang. */
   seitenzahl?: number | null
+  /** Zurueck auf den neuen Betrachter - siehe PlanAnsicht.tsx. */
+  onBetrachterWechsel: () => void
 }
 
 export function PdfViewer({
@@ -200,6 +202,7 @@ export function PdfViewer({
   onCanvasClick,
   onPointClick,
   seitenzahl,
+  onBetrachterWechsel,
 }: PdfViewerProps) {
   const categoryById = new Map(categories.map((c) => [c.id, c]))
 
@@ -968,6 +971,7 @@ export function PdfViewer({
 
     return {
       inhalt,
+      betrachter: 'alt',
       motor: genutzterMotor,
       stand: __BUILD_COMMIT__,
       gebaut: new Date(__BUILD_DATE__).toLocaleDateString('de-DE'),
@@ -1123,6 +1127,17 @@ export function PdfViewer({
           title={`Zeichenmotor: ${MOTOR_NAME[genutzterMotor]}. Umschalten auf ${MOTOR_NAME[genutzterMotor === 'pdfium' ? 'pdfjs' : 'pdfium']}.`}
         >
           {MOTOR_NAME[genutzterMotor]}
+        </button>
+        {/* Zurueck zum neuen Betrachter. Solange beide nebeneinanderstehen,
+            muss der Weg in beide Richtungen sichtbar sein - siehe
+            PlanAnsicht.tsx. */}
+        <button
+          type="button"
+          className="pdf-motor-knopf"
+          onClick={onBetrachterWechsel}
+          title="Zum neuen Betrachter (EmbedPDF) wechseln"
+        >
+          Alt
         </button>
         {/* Sagt, was die Ansicht gerade tut. */}
         <button

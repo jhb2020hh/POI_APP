@@ -792,6 +792,33 @@ textarea {
   position: absolute;
 }
 
+/* --- Neuer Betrachter (EmbedPDF) -----------------------------------------
+   Anders als der selbstgebaute schiebt er nicht per transform, sondern
+   blaettert echt. Deshalb darf hier nicht `touch-action: none` stehen und
+   auch kein `cursor: grab` - beides gehoert zum alten Verfahren. */
+.plan-flaeche-neu {
+  touch-action: auto;
+  cursor: default;
+  background: var(--color-surface-hover, #f1f1f1);
+}
+
+/* Nimmt die Kneif- und Strg+Rad-Geste entgegen und muss dafuer die ganze
+   Flaeche abdecken - auch neben einem herausgezoomten Plan. */
+.plan-gestenrahmen,
+.plan-viewport {
+  width: 100%;
+  height: 100%;
+}
+
+/* Der Bezugsrahmen der Nadeln: sie sitzen in Prozent darin. */
+.plan-seite {
+  position: relative;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  /* Auf dem Blatt legt ein Klick ein Ticket an - dort also das Fadenkreuz. */
+  cursor: crosshair;
+}
+
 .plan-pin {
   position: absolute;
   transform-origin: bottom center;

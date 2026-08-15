@@ -384,7 +384,7 @@ melde(
 
 const auszug = alsText(
   {
-    stand: 'abc1234', gebaut: '15.08.2026', motor: 'pdfium', inhalt: null,
+    stand: 'abc1234', gebaut: '15.08.2026', motor: 'pdfium', betrachter: 'alt', inhalt: null,
     seite: { breite: 2384, hoehe: 1684 }, einpass: 0.4964, zoom: 8, zoomMax: 16.1,
     verschiebung: { x: -3054, y: -2613 },
     flaeche: { breite: 1400, hoehe: 860 }, punktdichte: 1,
