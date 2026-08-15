@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
@@ -8,6 +9,28 @@ const projektstamm = fileURLToPath(new URL('../..', import.meta.url))
 const rootPackageJson = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf-8')
 )
+
+/**
+ * Der Commit, aus dem dieses Buendel gebaut wurde.
+ *
+ * Der Anlass ist konkret: eine gemeldete Unschaerfe liesz sich lange nicht
+ * einordnen, weil nicht feststand, welcher Stand im Browser lief. Vercel
+ * vergibt fuer jeden Commit eine eigene Preview-Adresse - eine gemerkte
+ * aeltere zeigt dauerhaft alten Code. Die Versionsnummer aus der package.json
+ * hilft dabei nicht, sie steht seit Langem auf 0.2.0, und zwei Buendel
+ * desselben Tages sind am Datum ebenfalls nicht zu unterscheiden.
+ *
+ * Auf Vercel steht der Wert in der Umgebung; lokal wird git gefragt.
+ */
+function ermittleCommit(): string {
+  const ausVercel = process.env.VERCEL_GIT_COMMIT_SHA
+  if (ausVercel) return ausVercel.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'unbekannt'
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -56,6 +79,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(rootPackageJson.version),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+      __BUILD_COMMIT__: JSON.stringify(ermittleCommit()),
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
     },

@@ -1010,8 +1010,14 @@ function App() {
         </main>
       </div>
 
+      {/* Der Commit steht bewusst mit dabei: ohne ihn liesz sich eine gemeldete
+          Beobachtung nicht dem Stand zuordnen, aus dem sie stammt. Vercel
+          vergibt je Commit eine eigene Preview-Adresse, und eine gemerkte
+          aeltere zeigt dauerhaft alten Code. */}
       <footer className="app-footer">
-        POI-App v{__APP_VERSION__} · Stand {new Date(__BUILD_DATE__).toLocaleDateString('de-DE')}
+        POI-App v{__APP_VERSION__} · Stand{' '}
+        {new Date(__BUILD_DATE__).toLocaleDateString('de-DE')} ·{' '}
+        <span title="Commit, aus dem dieses Bündel gebaut wurde">{__BUILD_COMMIT__}</span>
       </footer>
 
       {drawer && (
