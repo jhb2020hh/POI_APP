@@ -7,7 +7,82 @@
  */
 import { useState } from 'react'
 import { Zeichen } from './Zeichen'
-import { alsText, aufloesungPasst, type PlanDiagnose } from '../utils/planDiagnose'
+import {
+  alsText,
+  aufloesungPasst,
+  bilddehnung,
+  gezeichneteDpi,
+  type PlanDiagnose,
+} from '../utils/planDiagnose'
+
+/**
+ * Der eine Satz, auf den es ankommt.
+ *
+ * Trennt die beiden Faelle, die von auszen gleich aussehen: eine zu grob
+ * gezeichnete Vektorzeichnung (behebbar) und ein hochskaliertes Rasterbild
+ * (nicht behebbar - die Bildinformation ist nicht da).
+ */
+function befund(d: PlanDiagnose): { text: string; gut: boolean } {
+  if (d.scharf.massstab === null) {
+    return { text: 'Es liegt noch keine scharfe Ebene vor.', gut: false }
+  }
+  if (!aufloesungPasst(d)) {
+    return {
+      text:
+        `Der Ausschnitt wird zu grob gezeichnet: Maßstab ${d.scharf.massstab.toFixed(2)} ` +
+        `statt ${d.scharf.benoetigt?.toFixed(2) ?? '?'}. Das ist ein Fehler in der Anwendung.`,
+      gut: false,
+    }
+  }
+
+  if (!d.inhalt) {
+    return { text: 'Der sichtbare Ausschnitt wird punktgenau gezeichnet.', gut: true }
+  }
+
+  const gez = gezeichneteDpi(d)
+  const dehnung = gez === null ? null : bilddehnung(d.inhalt, gez)
+
+  // Die Aussage stuetzt sich auf die *Struktur* der Seite, nicht auf die
+  // Bildmasze: die sind ein Zusatz und nicht immer zu bekommen. Eine Zeichnung
+  // ohne einen einzigen Textbefehl besteht nicht aus Text - dann steckt die
+  // Beschriftung im Bild und kann nie schaerfer werden als dieses.
+  if (d.inhalt.bilder > 0 && d.inhalt.textstellen === 0) {
+    const masze = d.inhalt.groesstesBild
+      ? ` (${d.inhalt.groesstesBild.breite} × ${d.inhalt.groesstesBild.hoehe} px` +
+        (d.inhalt.dpi ? `, ${d.inhalt.dpi.toFixed(0)} dpi` : '') +
+        (dehnung ? `, hier ${dehnung.toFixed(1)}× gedehnt` : '') +
+        ')'
+      : ''
+    return {
+      text:
+        `Gezeichnet wird punktgenau — aber die Seite enthält keinen einzigen ` +
+        `Textbefehl und ${d.inhalt.bilder} Bild(er)${masze}. Die Zeichnung liegt ` +
+        `also als Rasterbild in der Datei, nicht als Linien und Text. Mehr ` +
+        `Bildinformation ist nicht vorhanden; daran kann kein Betrachter etwas ` +
+        `ändern — auch Acrobat nicht. Abhilfe: den Plan aus dem CAD als ` +
+        `Vektor-PDF ausgeben statt als Bild.`,
+      gut: false,
+    }
+  }
+
+  if (d.inhalt.bilder > 0 && dehnung !== null && dehnung > 1.5) {
+    return {
+      text:
+        `Gezeichnet wird punktgenau. Linien und Text bleiben scharf, aber ein ` +
+        `enthaltenes Bild mit ${d.inhalt.dpi?.toFixed(0)} dpi wird ` +
+        `${dehnung.toFixed(1)}× gedehnt und bleibt deshalb weich.`,
+      gut: false,
+    }
+  }
+
+  if (d.inhalt.bilder === 0) {
+    return {
+      text: 'Punktgenau gezeichnet, und die Seite besteht aus Linien und Text — sie muss in jedem Maßstab scharf sein.',
+      gut: true,
+    }
+  }
+  return { text: 'Der sichtbare Ausschnitt wird punktgenau gezeichnet.', gut: true }
+}
 
 interface Props {
   diagnose: PlanDiagnose
@@ -18,8 +93,9 @@ export function PlanDiagnoseDialog({ diagnose, onClose }: Props) {
   const [kopiert, setKopiert] = useState(false)
   // Einmal beim Oeffnen festgehalten: die Werte beschreiben genau diesen
   // Augenblick, und der Verlauf soll waehrend des Lesens nicht wandern.
-  const [text] = useState(() => alsText(diagnose, Date.now()))
-  const passt = aufloesungPasst(diagnose)
+  // Der Inhaltsbefund wird nachgereicht - deshalb bei jeder Aenderung neu.
+  const text = alsText(diagnose, Date.now())
+  const { text: urteil, gut } = befund(diagnose)
 
   async function kopieren() {
     try {
@@ -43,13 +119,7 @@ export function PlanDiagnoseDialog({ diagnose, onClose }: Props) {
         </div>
 
         <div className="modal-body">
-          <p className={`hinweis ${passt ? '' : 'hinweis-fehler'}`}>
-            {diagnose.scharf.massstab === null
-              ? 'Es liegt noch keine scharfe Ebene vor — der Plan wird gerade nur grob dargestellt.'
-              : passt
-                ? 'Der sichtbare Ausschnitt wird punktgenau gezeichnet.'
-                : `Der Ausschnitt wird zu grob gezeichnet: Maßstab ${diagnose.scharf.massstab.toFixed(2)} statt ${diagnose.scharf.benoetigt?.toFixed(2) ?? '?'}.`}
-          </p>
+          <p className={`hinweis ${gut ? '' : 'hinweis-fehler'}`}>{urteil}</p>
 
           <label className="field">
             <span className="field-label">Auszug zum Weitergeben</span>

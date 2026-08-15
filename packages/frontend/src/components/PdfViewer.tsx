@@ -7,6 +7,7 @@ import { Zeichen } from './Zeichen'
 import { PlanDiagnoseDialog } from './PlanDiagnoseDialog'
 import {
   schreibeVerlauf,
+  type Inhaltsbefund,
   type PlanDiagnose,
   type Verlaufseintrag,
 } from '../utils/planDiagnose'
@@ -141,6 +142,104 @@ function z2(wert: number): string {
 }
 
 /**
+ * Sieht nach, woraus die Seite besteht.
+ *
+ * Die Frage dahinter ist die einzige, die sich mit Zeichnen nicht klaeren
+ * laesst: sind es Linien und Text - dann muss jeder Maszstab scharf werden -
+ * oder liegt ein Rasterbild fester Aufloesung darin? Ein hochskaliertes Bild
+ * und eine zu grob gezeichnete Vektorzeichnung sehen von auszen gleich aus,
+ * verlangen aber voellig verschiedene Antworten. Im ersten Fall kann *kein*
+ * Betrachter helfen - die Bildinformation ist schlicht nicht da.
+ *
+ * Laeuft nur beim Oeffnen des Infofensters, nicht im Normalbetrieb.
+ */
+async function untersucheInhalt(
+  pdf: PDFDocumentProxy,
+  seite: Masze
+): Promise<Inhaltsbefund> {
+  const page = await pdf.getPage(1)
+  const liste = await page.getOperatorList()
+  const OPS = pdfjsLib.OPS
+
+  let bilder = 0
+  let pfade = 0
+  let textstellen = 0
+  // Als Liste und nicht als laufendes Maximum: eine Zuweisung aus einer
+  // Closure heraus verengt TypeScript sonst zu `never`.
+  const groessen: Masze[] = []
+
+  function merkeBild(obj: unknown) {
+    const b = obj as { width?: number; height?: number } | undefined
+    if (!b?.width || !b.height) return
+    groessen.push({ breite: b.width, hoehe: b.height })
+  }
+
+  /**
+   * Versucht, die Bildmasze zu bekommen.
+   *
+   * Bilder liegen in zwei Speichern: gemeinsam genutzte unter "g_..." in
+   * `commonObjs`, seitenbezogene in `objs` - pdf.js unterscheidet intern genau
+   * so. Ob die Daten dort noch stehen, haengt allerdings davon ab, wann
+   * zuletzt gezeichnet wurde; deshalb die Rueckfallebene mit Rueckruf und
+   * kurzer Frist statt einer Ausnahme.
+   *
+   * Bleibt es ohne Ergebnis, fehlen nur die Masze. Die Aussage, *ob* die
+   * Zeichnung aus Bildern besteht, steht davon unabhaengig fest - sie ergibt
+   * sich aus den Zeichenbefehlen selbst.
+   */
+  function holeBild(id: string): Promise<unknown> {
+    const speicher = id.startsWith('g_') ? page.commonObjs : page.objs
+    if (speicher.has(id)) {
+      try {
+        return Promise.resolve(speicher.get(id))
+      } catch {
+        return Promise.resolve(undefined)
+      }
+    }
+    return new Promise((fertig) => {
+      const frist = window.setTimeout(() => fertig(undefined), 400)
+      try {
+        speicher.get(id, (daten: unknown) => {
+          window.clearTimeout(frist)
+          fertig(daten)
+        })
+      } catch {
+        window.clearTimeout(frist)
+        fertig(undefined)
+      }
+    })
+  }
+
+  for (let i = 0; i < liste.fnArray.length; i++) {
+    const fn = liste.fnArray[i]
+    if (fn === OPS.paintImageXObject || fn === OPS.paintImageXObjectRepeat) {
+      bilder++
+      merkeBild(await holeBild(liste.argsArray[i][0] as string))
+    } else if (fn === OPS.paintInlineImageXObject) {
+      bilder++
+      merkeBild(liste.argsArray[i][0])
+    } else if (fn === OPS.constructPath) {
+      pfade++
+    } else if (fn === OPS.showText) {
+      textstellen++
+    }
+  }
+
+  const zollBreite = seite.breite / 72
+  const bild = groessen.reduce<Masze | null>(
+    (groesstes, m) => (!groesstes || m.breite > groesstes.breite ? m : groesstes),
+    null
+  )
+  return {
+    bilder,
+    pfade,
+    textstellen,
+    groesstesBild: bild,
+    dpi: bild && zollBreite > 0 ? bild.breite / zollBreite : null,
+  }
+}
+
+/**
  * Die Planansicht.
  *
  * Der tragende Gedanke: Sehen und Zeichnen sind getrennt.
@@ -229,7 +328,7 @@ export function PdfViewer({
   const verlaufRef = useRef<Verlaufseintrag[]>([])
   /** Dauer der letzten erfolgreichen Zeichnung der Scharfebene, in ms. */
   const letzteDauerRef = useRef<number | null>(null)
-  const [diagnoseOffen, setDiagnoseOffen] = useState(false)
+  const [diagnose, setDiagnose] = useState<PlanDiagnose | null>(null)
 
   /**
    * Seitengroesze und Einpassmaszstab zusaetzlich als Ref.
@@ -871,7 +970,22 @@ export function PdfViewer({
    * Die Werte fuer das Infofenster - erst beim Oeffnen zusammengetragen,
    * damit im Normalbetrieb nichts davon Arbeit macht.
    */
-  function sammleDiagnose(): PlanDiagnose {
+  async function oeffneDiagnose() {
+    const grund = sammleDiagnose(null)
+    setDiagnose(grund)
+    // Der Inhalt wird nachgereicht: das Durchgehen der Zeichenbefehle dauert
+    // bei einem groszen Plan einen Moment, und das Fenster soll sofort stehen.
+    const pdf = pdfDocRef.current
+    if (!pdf || !seite) return
+    try {
+      const inhalt = await untersucheInhalt(pdf, seite)
+      setDiagnose((v) => (v ? { ...v, inhalt } : v))
+    } catch {
+      /* Ohne Inhaltsbefund bleibt der Rest brauchbar. */
+    }
+  }
+
+  function sammleDiagnose(inhalt: Inhaltsbefund | null): PlanDiagnose {
     const flaeche = flaechenMasze()
     const dichte = geraeteDichte(window.devicePixelRatio)
     const scharfCanvas = scharfCanvasRef.current
@@ -886,6 +1000,7 @@ export function PdfViewer({
         : null
 
     return {
+      inhalt,
       stand: __BUILD_COMMIT__,
       gebaut: new Date(__BUILD_DATE__).toLocaleDateString('de-DE'),
       seite,
@@ -1040,7 +1155,7 @@ export function PdfViewer({
         <button
           type="button"
           className="icon-btn"
-          onClick={() => setDiagnoseOffen(true)}
+          onClick={() => void oeffneDiagnose()}
           title="Angaben zur Darstellung"
           aria-label="Angaben zur Darstellung"
         >
@@ -1068,8 +1183,8 @@ export function PdfViewer({
         )}
       </div>
 
-      {diagnoseOffen && (
-        <PlanDiagnoseDialog diagnose={sammleDiagnose()} onClose={() => setDiagnoseOffen(false)} />
+      {diagnose && (
+        <PlanDiagnoseDialog diagnose={diagnose} onClose={() => setDiagnose(null)} />
       )}
     </div>
   )

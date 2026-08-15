@@ -50,9 +50,38 @@ export interface Masze {
   hoehe: number
 }
 
+/**
+ * Woraus die Seite besteht.
+ *
+ * Die Frage, die damit beantwortet wird: liegt in der PDF eine Zeichnung aus
+ * Linien und Text - dann laesst sie sich in jedem Maszstab scharf zeichnen -
+ * oder ein Rasterbild fester Aufloesung? Im zweiten Fall ist ab einem
+ * bestimmten Zoom schlicht keine weitere Bildinformation vorhanden, und *kein*
+ * Betrachter kann daran etwas aendern. Von auszen sehen beide Faelle beim
+ * Hineinzoomen gleich aus.
+ */
+export interface Inhaltsbefund {
+  bilder: number
+  pfade: number
+  textstellen: number
+  groesstesBild: Masze | null
+  /** Bildpunkte je Zoll, bezogen auf die Seitenbreite. */
+  dpi: number | null
+}
+
+/**
+ * Wie weit ein Rasterbild bei der aktuellen Vergroeszerung gedehnt wird.
+ * Werte ueber 1 heiszen: es wird mehr Bildinformation verlangt als vorhanden.
+ */
+export function bilddehnung(befund: Inhaltsbefund | null, dpiGezeichnet: number): number | null {
+  if (!befund?.dpi || befund.dpi <= 0) return null
+  return dpiGezeichnet / befund.dpi
+}
+
 export interface PlanDiagnose {
   stand: string
   gebaut: string
+  inhalt: Inhaltsbefund | null
   seite: Masze | null
   einpass: number | null
   zoom: number
@@ -95,6 +124,37 @@ export function aufloesungPasst(d: PlanDiagnose): boolean {
 }
 
 /**
+ * Bildpunkte je Zoll, in denen der sichtbare Ausschnitt gerade gezeichnet wird.
+ * 72 pt sind ein Zoll; `massstab` zaehlt Bildpunkte je Buehnenpunkt.
+ */
+export function gezeichneteDpi(d: PlanDiagnose): number | null {
+  if (!d.einpass || d.scharf.massstab === null) return null
+  return d.einpass * d.scharf.massstab * 72
+}
+
+function inhaltsZeilen(d: PlanDiagnose): string[] {
+  if (!d.inhalt) return ['Inhalt       (noch nicht untersucht)']
+  const i = d.inhalt
+  const zeilen = [
+    `Inhalt       ${i.pfade} Linienzüge · ${i.textstellen} Textstellen · ${i.bilder} Bilder`,
+  ]
+  if (i.bilder > 0 && i.groesstesBild) {
+    zeilen.push(
+      `             größtes Bild ${masze(i.groesstesBild)} px = ${i.dpi?.toFixed(0) ?? '?'} dpi`
+    )
+    const gez = gezeichneteDpi(d)
+    const dehnung = gez === null ? null : bilddehnung(i, gez)
+    if (gez !== null) {
+      zeilen.push(
+        `             gezeichnet in ${gez.toFixed(0)} dpi` +
+          (dehnung === null ? '' : ` → Bild ${dehnung.toFixed(1)}× gedehnt`)
+      )
+    }
+  }
+  return zeilen
+}
+
+/**
  * Baut den Text, den der Nutzer kopiert und weitergibt.
  *
  * Reiner Text mit fester Spaltenbreite: er soll sich in eine Nachricht
@@ -114,6 +174,8 @@ export function alsText(d: PlanDiagnose, jetzt: number): string {
     `             Verschiebung ${d.verschiebung.x.toFixed(0)} / ${d.verschiebung.y.toFixed(0)}${
       d.zoomMax ? ` · Obergrenze ${(d.zoomMax * (d.einpass ?? 1) * 100).toFixed(0)} %` : ''
     }`,
+    '',
+    ...inhaltsZeilen(d),
     '',
     `Grundebene   Bitmap ${masze(d.grundBitmap)}`,
     `Scharfebene  sichtbar: ${d.scharf.sichtbar ? 'ja' : 'NEIN'}`,
