@@ -26,9 +26,11 @@ import {
   geraeteDichte,
   liegtDrin,
   radZuFaktor,
+  rechneKachel,
   zoomeAufPunkt,
   type Ansicht,
   type Masze,
+  type Rechteck,
 } from '../src/utils/planAnsicht'
 import {
   VERLAUF_LAENGE,
@@ -382,7 +384,7 @@ melde(
 
 const auszug = alsText(
   {
-    stand: 'abc1234', gebaut: '15.08.2026',
+    stand: 'abc1234', gebaut: '15.08.2026', motor: 'pdfium', inhalt: null,
     seite: { breite: 2384, hoehe: 1684 }, einpass: 0.4964, zoom: 8, zoomMax: 16.1,
     verschiebung: { x: -3054, y: -2613 },
     flaeche: { breite: 1400, hoehe: 860 }, punktdichte: 1,
@@ -398,6 +400,63 @@ const auszug = alsText(
 melde(auszug.includes('Maßstab  8.00 · benötigt 8.00'), 'der Auszug nennt vorhandenen und noetigen Maszstab')
 melde(auszug.includes('Lauf 39'), 'der Auszug enthaelt den Verlauf')
 melde(!auszug.includes('undefined') && !auszug.includes('NaN'), 'der Auszug enthaelt keine Luecken')
+// Ohne diese Zeile ist aus einer Rueckmeldung nicht zu erkennen, welcher Motor
+// gezeichnet hat - und genau daran haengt die Frage, ob es am Motor liegt.
+melde(auszug.includes('PDFium'), 'der Auszug nennt den Motor')
+
+console.log('')
+console.log('10. Kachelrechnung - dieselbe fuer beide Motoren')
+
+// Die Rechnung, mit der ein Motor einen Ausschnitt zeichnet. Ein Vorzeichen-
+// oder Faktorfehler darin zeigte sich als verschobenes oder unscharfes Bild,
+// ohne dass irgendetwas meldet - deshalb steht sie hier und nicht im Motor.
+const K_BLATT = 0.1647 // Einpassmaszstab des groszen Plans
+const K_FENSTER: Rechteck = { x: 120.5, y: 64.25, breite: 300, hoehe: 180 }
+
+const kachelEins = rechneKachel(K_FENSTER, K_BLATT, 1)
+melde(kachelEins.breite === 300 && kachelEins.hoehe === 180, 'bei Maszstab 1 ist das Bild so grosz wie der Ausschnitt')
+melde(gleich(kachelEins.seitenMassstab, K_BLATT), 'und die Seite wird im Einpassmaszstab aufgespannt')
+
+const kachel16 = rechneKachel(K_FENSTER, K_BLATT, 16)
+melde(kachel16.breite === 4800 && kachel16.hoehe === 2880, 'bei Maszstab 16 waechst das Bild mit', `${kachel16.breite}x${kachel16.hoehe}`)
+melde(
+  gleich(kachel16.seitenMassstab, K_BLATT * 16),
+  'die ganze Seite waechst im selben Verhaeltnis',
+  `${kachel16.seitenMassstab}`
+)
+// Der Kern: die linke obere Ecke des Ausschnitts muss auf dem Bild bei (0,0)
+// liegen. Falsches Vorzeichen hiesze, dass ein ganz anderer Teil des Plans
+// gezeichnet wird - beim Zoomen sieht das aus wie "es tut sich nichts".
+melde(
+  gleich(kachel16.versatzX, -K_FENSTER.x * 16) && gleich(kachel16.versatzY, -K_FENSTER.y * 16),
+  'der Ausschnitt wird an den Bildanfang geschoben',
+  `${kachel16.versatzX} / ${kachel16.versatzY}`
+)
+melde(
+  gleich(K_FENSTER.x * kachel16.seitenMassstab / K_BLATT + kachel16.versatzX, 0),
+  'Gegenprobe: die Ecke landet rechnerisch genau auf null'
+)
+
+// Der Ausschnitt am Blattanfang darf nicht verschoben werden.
+const kachelNull = rechneKachel({ x: 0, y: 0, breite: 100, hoehe: 50 }, 1, 2)
+melde(kachelNull.versatzX === 0 && kachelNull.versatzY === 0, 'ein Ausschnitt am Blattanfang bleibt stehen')
+
+// Ein Canvas der Groesze null ist nicht erlaubt und liefert stumm nichts.
+const kachelWinzig = rechneKachel({ x: 0, y: 0, breite: 0.2, hoehe: 0.2 }, 1, 1)
+melde(kachelWinzig.breite >= 1 && kachelWinzig.hoehe >= 1, 'ein winziger Ausschnitt ergibt trotzdem mindestens einen Bildpunkt')
+
+// Und die Verbindung zum Rest: was berechneScharfMassstab liefert, muss durch
+// die Kachelrechnung ein Bild innerhalb der Browsergrenzen ergeben.
+for (const zoom of [8, 16, 32, maxGrosz]) {
+  const a: Ansicht = { zoom, x: -buehneGrosz.breite * zoom * 0.4, y: -buehneGrosz.hoehe * zoom * 0.4 }
+  const f = berechneSichtfenster(a, buehneGrosz, NOTEBOOK)
+  const k = rechneKachel(f, einpassGrosz, berechneScharfMassstab(zoom, 2, f))
+  melde(
+    k.breite <= CANVAS_KANTE_MAX && k.hoehe <= CANVAS_KANTE_MAX && k.breite * k.hoehe <= CANVAS_FLAECHE_MAX,
+    `bei ${(zoom * einpassGrosz * 100).toFixed(0)} % bleibt das Bild innerhalb der Browsergrenzen`,
+    `${k.breite}x${k.hoehe}`
+  )
+}
 
 console.log('')
 console.log(allesOk ? 'Ergebnis: alles in Ordnung.' : 'Ergebnis: es gibt Abweichungen.')

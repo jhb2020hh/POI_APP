@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
-import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import type { Category, Point } from '@poi-app/shared'
 import { getToken } from '../api/client'
 import { Zeichen } from './Zeichen'
@@ -11,6 +9,15 @@ import {
   type PlanDiagnose,
   type Verlaufseintrag,
 } from '../utils/planDiagnose'
+import {
+  MOTOR_NAME,
+  istAbbruch,
+  type Blatt,
+  type Dokument,
+  type Motor,
+  type MotorKennung,
+  type Zeichnung,
+} from '../utils/pdfMotor'
 import {
   ANSICHT_START,
   berechneZoomMax,
@@ -29,11 +36,6 @@ import {
   type Rechteck,
 } from '../utils/planAnsicht'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString()
-
 const FALLBACK_COLOR = '#888888'
 const FALLBACK_GLYPH = '!'
 
@@ -45,42 +47,68 @@ const FALLBACK_GLYPH = '!'
 const TIPP_TOLERANZ_PX = 10
 const TIPP_HOECHSTDAUER_MS = 600
 
-/** Ruhe nach der Geste, bevor pdf.js scharf nachzeichnet. */
+/** Ruhe nach der Geste, bevor scharf nachgezeichnet wird. */
 const NACHSCHAERFEN_MS = 150
 
 /** Wartezeit vor dem einen erlaubten zweiten Versuch. */
 const ZWEITER_VERSUCH_MS = 400
 
+/* ---------------------------------------------------------------------------
+   Motorwahl
+   ------------------------------------------------------------------------- */
+
+const MOTOR_SPEICHER = 'poi.planmotor'
+
+/**
+ * PDFium ist die Vorgabe - derselbe Motor, mit dem Chrome PDF anzeigt.
+ * pdf.js bleibt umschaltbar, damit sich bei einer Beanstandung in zwei Klicks
+ * klaeren laesst, ob es am Motor liegt oder an der Datei.
+ */
+const MOTOR_VORGABE: MotorKennung = 'pdfium'
+
+/**
+ * Nachgelagert geladen, und zwar beide.
+ *
+ * Zusammen bringen die Motoren rund 1,6 MB JavaScript mit - pdf.js seinen
+ * Arbeiter, PDFium die Bruecke zum WebAssembly. Statisch eingebunden zahlte das
+ * jeder Seitenaufruf, auch wer nur Tickets durchsieht und keinen Plan oeffnet.
+ * Die 4,6 MB grosze wasm-Datei selbst kommt ohnehin erst beim ersten Plan.
+ */
+async function motorFuer(kennung: MotorKennung): Promise<Motor> {
+  if (kennung === 'pdfjs') return (await import('../utils/motorPdfJs')).motorPdfJs
+  return (await import('../utils/motorPdfium')).motorPdfium
+}
+
+function gemerkterMotor(): MotorKennung {
+  try {
+    const wert = window.localStorage.getItem(MOTOR_SPEICHER)
+    return wert === 'pdfjs' || wert === 'pdfium' ? wert : MOTOR_VORGABE
+  } catch {
+    // Ohne Zugriff auf den Speicher (private Sitzung, gesperrte Einstellung)
+    // bleibt es bei der Vorgabe.
+    return MOTOR_VORGABE
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Zeichenauftraege
+   ------------------------------------------------------------------------- */
+
 /**
  * Haelt die Zeichenauftraege *einer* Ebene auseinander.
  *
- * Der Grund ist ein nachgestellter Fehler und keine Vorsichtsmasznahme: in
- * `zeichneScharf` lag zwischen dem Abbrechen des vorigen Auftrags und dem
- * Zeichnen ein `await pdf.getPage(1)`. Zwei Aufrufe konnten sich darueber
- * verschraenken - der zweite brach nichts ab, weil der erste seinen Auftrag
- * noch gar nicht eingetragen hatte. Danach zeichneten beide auf dasselbe
- * Canvas, was pdf.js ausdruecklich verbietet:
+ * Beide Motoren vertragen es nicht, wenn zwei Zeichnungen gleichzeitig auf
+ * dasselbe Canvas laufen: pdf.js weist es ausdruecklich zurueck ("Cannot use
+ * the same canvas during multiple render() operations"), und PDFium schriebe
+ * die Streifen der alten Zeichnung in ein inzwischen anders groszes Canvas.
  *
- *   "Cannot use the same canvas during multiple render() operations."
- *
- * Der Fehler entstand asynchron, war keine RenderingCancelledException und
- * wurde deshalb weitergeworfen - in ein `void zeichneScharf(...)` hinein. Er
- * verschwand also lautlos, und die Scharfebene blieb auf dem alten Stand
- * stehen: der Plan wurde beim Zoomen nicht mehr scharf.
- *
- * Wie oft das zuschlaegt, haengt daran, wie lange `getPage` braucht. Bei einem
- * frisch hochgeladenen Plan ist das Dokument noch nirgends zwischengespeichert
- * und die Wartezeit lang - dieselbe Datei war deshalb einmal scharf und einmal
- * nicht.
- *
- * Hier wird jeder Auftrag mit einer Marke versehen. Ein neuer Auftrag bricht
- * den laufenden ab, wartet dessen *tatsaechliches* Ende ab und steigt aus,
- * falls er inzwischen selbst ueberholt wurde. Erst danach wird ein Canvas
- * angefasst.
+ * Ein neuer Auftrag bricht deshalb den laufenden ab, wartet dessen
+ * *tatsaechliches* Ende ab und steigt aus, falls er inzwischen selbst ueberholt
+ * wurde. Erst danach wird ein Canvas angefasst.
  */
 interface Zeichenschlange {
   marke: number
-  laufend: RenderTask | null
+  laufend: Zeichnung | null
   fertig: Promise<void>
 }
 
@@ -90,35 +118,28 @@ function neueSchlange(): Zeichenschlange {
 
 async function reiheEin(
   schlange: Zeichenschlange,
-  auftrag: (istAktuell: () => boolean, setzeLaufend: (t: RenderTask) => void) => Promise<void>
+  auftrag: (istAktuell: () => boolean, setzeLaufend: (z: Zeichnung) => void) => Promise<void>
 ): Promise<void> {
   const meine = ++schlange.marke
-  schlange.laufend?.cancel()
+  schlange.laufend?.abbrechen()
 
   const vorher = schlange.fertig
   let melde: () => void = () => {}
   schlange.fertig = new Promise<void>((r) => (melde = r))
 
   try {
-    // Nicht nur abbrechen, sondern das Ende abwarten: pdf.js traegt das Canvas
-    // erst dann wieder aus seinem Verzeichnis aus.
     await vorher
     if (meine !== schlange.marke) return
     await auftrag(
       () => meine === schlange.marke,
-      (t) => {
-        schlange.laufend = t
+      (z) => {
+        schlange.laufend = z
       }
     )
   } finally {
     if (schlange.laufend && meine === schlange.marke) schlange.laufend = null
     melde()
   }
-}
-
-/** Abbrueche sind der Normalfall und keine Stoerung. */
-function istAbbruch(fehler: unknown): boolean {
-  return (fehler as { name?: string })?.name === 'RenderingCancelledException'
 }
 
 /**
@@ -128,115 +149,13 @@ function istAbbruch(fehler: unknown): boolean {
  * offenliesz: *passiert ueberhaupt etwas?* Ringpuffer in einem Ref - er loest
  * keinen Renderdurchlauf aus und aendert am Verhalten nichts.
  */
-function merke(
-  puffer: Verlaufseintrag[],
-  was: Verlaufseintrag['was'],
-  text: string
-): void {
+function merke(puffer: Verlaufseintrag[], was: Verlaufseintrag['was'], text: string): void {
   schreibeVerlauf(puffer, was, text, Date.now())
 }
 
 /** Zahl mit zwei Nachkommastellen, ohne Laendereinstellungen. */
 function z2(wert: number): string {
   return wert.toFixed(2)
-}
-
-/**
- * Sieht nach, woraus die Seite besteht.
- *
- * Die Frage dahinter ist die einzige, die sich mit Zeichnen nicht klaeren
- * laesst: sind es Linien und Text - dann muss jeder Maszstab scharf werden -
- * oder liegt ein Rasterbild fester Aufloesung darin? Ein hochskaliertes Bild
- * und eine zu grob gezeichnete Vektorzeichnung sehen von auszen gleich aus,
- * verlangen aber voellig verschiedene Antworten. Im ersten Fall kann *kein*
- * Betrachter helfen - die Bildinformation ist schlicht nicht da.
- *
- * Laeuft nur beim Oeffnen des Infofensters, nicht im Normalbetrieb.
- */
-async function untersucheInhalt(
-  pdf: PDFDocumentProxy,
-  seite: Masze
-): Promise<Inhaltsbefund> {
-  const page = await pdf.getPage(1)
-  const liste = await page.getOperatorList()
-  const OPS = pdfjsLib.OPS
-
-  let bilder = 0
-  let pfade = 0
-  let textstellen = 0
-  // Als Liste und nicht als laufendes Maximum: eine Zuweisung aus einer
-  // Closure heraus verengt TypeScript sonst zu `never`.
-  const groessen: Masze[] = []
-
-  function merkeBild(obj: unknown) {
-    const b = obj as { width?: number; height?: number } | undefined
-    if (!b?.width || !b.height) return
-    groessen.push({ breite: b.width, hoehe: b.height })
-  }
-
-  /**
-   * Versucht, die Bildmasze zu bekommen.
-   *
-   * Bilder liegen in zwei Speichern: gemeinsam genutzte unter "g_..." in
-   * `commonObjs`, seitenbezogene in `objs` - pdf.js unterscheidet intern genau
-   * so. Ob die Daten dort noch stehen, haengt allerdings davon ab, wann
-   * zuletzt gezeichnet wurde; deshalb die Rueckfallebene mit Rueckruf und
-   * kurzer Frist statt einer Ausnahme.
-   *
-   * Bleibt es ohne Ergebnis, fehlen nur die Masze. Die Aussage, *ob* die
-   * Zeichnung aus Bildern besteht, steht davon unabhaengig fest - sie ergibt
-   * sich aus den Zeichenbefehlen selbst.
-   */
-  function holeBild(id: string): Promise<unknown> {
-    const speicher = id.startsWith('g_') ? page.commonObjs : page.objs
-    if (speicher.has(id)) {
-      try {
-        return Promise.resolve(speicher.get(id))
-      } catch {
-        return Promise.resolve(undefined)
-      }
-    }
-    return new Promise((fertig) => {
-      const frist = window.setTimeout(() => fertig(undefined), 400)
-      try {
-        speicher.get(id, (daten: unknown) => {
-          window.clearTimeout(frist)
-          fertig(daten)
-        })
-      } catch {
-        window.clearTimeout(frist)
-        fertig(undefined)
-      }
-    })
-  }
-
-  for (let i = 0; i < liste.fnArray.length; i++) {
-    const fn = liste.fnArray[i]
-    if (fn === OPS.paintImageXObject || fn === OPS.paintImageXObjectRepeat) {
-      bilder++
-      merkeBild(await holeBild(liste.argsArray[i][0] as string))
-    } else if (fn === OPS.paintInlineImageXObject) {
-      bilder++
-      merkeBild(liste.argsArray[i][0])
-    } else if (fn === OPS.constructPath) {
-      pfade++
-    } else if (fn === OPS.showText) {
-      textstellen++
-    }
-  }
-
-  const zollBreite = seite.breite / 72
-  const bild = groessen.reduce<Masze | null>(
-    (groesstes, m) => (!groesstes || m.breite > groesstes.breite ? m : groesstes),
-    null
-  )
-  return {
-    bilder,
-    pfade,
-    textstellen,
-    groesstesBild: bild,
-    dpi: bild && zollBreite > 0 ? bild.breite / zollBreite : null,
-  }
 }
 
 /**
@@ -252,15 +171,15 @@ async function untersucheInhalt(
  *       Scharfebene    nur der sichtbare Ausschnitt, in voller Aufloesung.
  *       Pins           weiterhin in Prozent, wachsen aber nicht mit
  *
- * Vorher lag beides auf einer Groesze: `scale` bestimmte zugleich den Anblick
- * und die Aufloesung des Canvas. Jede Bewegung hing damit am Neuzeichnen, das
- * Layout aenderte sich dabei, und der Ausschnitt sprang.
- *
  * Zwei Ebenen und nicht eine, weil die ganze Seite in voller Aufloesung nicht
  * darstellbar ist: ein A1-Plan bei 800 % braeuchte rund 1,6 GB. Nur den
  * Ausschnitt zu zeichnen kostet dagegen unabhaengig vom Zoom immer gleich
  * viel. Die Grundebene darunter sorgt dafuer, dass beim Schwenken kein weiszes
  * Loch entsteht, solange der scharfe Ausschnitt noch nachzieht.
+ *
+ * *Wie* gezeichnet wird, steht nicht mehr hier: das erledigt ein Motor hinter
+ * der Schnittstelle in utils/pdfMotor.ts. Der Baustein kennt nur noch
+ * "zeichne diesen Ausschnitt in dieser Aufloesung".
  */
 interface PdfViewerProps {
   fileUrl: string
@@ -269,7 +188,7 @@ interface PdfViewerProps {
   selectedPointId?: string
   onCanvasClick: (relX: number, relY: number) => void
   onPointClick: (point: Point) => void
-  /** Nur fuer den Hinweis: der Betrachter zeigt immer Seite 1. */
+  /** Aus der Datenbank; der Motor weisz es genauer und hat Vorrang. */
   seitenzahl?: number | null
 }
 
@@ -288,13 +207,20 @@ export function PdfViewer({
   const buehneRef = useRef<HTMLDivElement>(null)
   const grundCanvasRef = useRef<HTMLCanvasElement>(null)
   const scharfCanvasRef = useRef<HTMLCanvasElement>(null)
-  const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
+  const dokRef = useRef<Dokument | null>(null)
+  /**
+   * Seite 1, einmal geholt.
+   *
+   * Frueher wurde vor jeder Zeichnung `getPage` aufgerufen - ein `await`
+   * zwischen dem Abbrechen des vorigen Auftrags und dem Zeichnen, ueber das
+   * sich zwei Auftraege verschraenken konnten. Ein einmal geholtes Blatt macht
+   * das Zeichnen bis zum Auftrag synchron; die Luecke gibt es nicht mehr.
+   */
+  const blattRef = useRef<Blatt | null>(null)
   // Je Ebene eine Schlange: die beiden zeichnen auf verschiedene Canvas und
   // duerfen deshalb nebeneinanderher laufen - nur je Ebene nicht.
   const grundSchlange = useRef<Zeichenschlange>(neueSchlange())
   const scharfSchlange = useRef<Zeichenschlange>(neueSchlange())
-  /** Nur zum Freigeben - `destroy` haengt am Ladeauftrag, nicht am Dokument. */
-  const ladeAuftragRef = useRef<PDFDocumentLoadingTask | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [neuVersuch, setNeuVersuch] = useState(0)
@@ -312,16 +238,15 @@ export function PdfViewer({
   /**
    * Ein Zeichenfehler, der auch nach dem zweiten Versuch geblieben ist.
    *
-   * Er wird angezeigt statt verschluckt. Genau daran lag es: der Fehler fiel in
-   * ein `void` und niemand erfuhr davon - der Plan blieb einfach unscharf.
+   * Er wird angezeigt statt verschluckt. Genau daran lag es einmal: der Fehler
+   * fiel in ein `void` und niemand erfuhr davon - der Plan blieb unscharf.
    */
   const [zeichenFehler, setZeichenFehler] = useState<string | null>(null)
   /**
    * Ob die Scharfebene der aktuellen Ansicht hinterherhaengt.
    *
    * Normalerweise ein Wimpernschlag. Bleibt es dabei, stimmt etwas nicht - und
-   * genau das soll man sehen koennen. Die Anzeige blendet sich erst nach zwei
-   * Sekunden ein (rein ueber CSS), damit der Normalfall unsichtbar bleibt.
+   * genau das soll man sehen koennen.
    */
   const [schaerfeLaeuft, setSchaerfeLaeuft] = useState(false)
   /** Siehe Verlaufseintrag: beantwortet, ob ueberhaupt etwas passiert. */
@@ -330,17 +255,33 @@ export function PdfViewer({
   const letzteDauerRef = useRef<number | null>(null)
   const [diagnose, setDiagnose] = useState<PlanDiagnose | null>(null)
 
+  /** Was der Benutzer gewaehlt hat. */
+  const [motor, setMotor] = useState<MotorKennung>(gemerkterMotor)
+  /** Was tatsaechlich zeichnet - kann davon abweichen, siehe Rueckfall unten. */
+  const [genutzterMotor, setGenutzterMotor] = useState<MotorKennung>(motor)
+  const [motorHinweis, setMotorHinweis] = useState<string | null>(null)
+  /** Seitenzahl aus dem Dokument; genauer als der Wert aus der Datenbank. */
+  const [seitenImDokument, setSeitenImDokument] = useState<number | null>(null)
+
   /**
    * Seitengroesze und Einpassmaszstab zusaetzlich als Ref.
    *
    * Der ResizeObserver und die Zeigerbehandlung werden genau einmal gesetzt.
    * Ohne Ref rechneten sie mit dem Stand aus ihrer Closure - beim Zoomen also
-   * fortlaufend mit dem Ausgangswert. Die Ansicht selbst braucht das nicht:
-   * jede Aenderung laeuft ueber die Funktionsform von setzeAnsicht und bekommt
-   * den aktuellen Stand von React.
+   * fortlaufend mit dem Ausgangswert.
    */
   const einpassRef = useRef<number | null>(null)
   const seiteRef = useRef<Masze | null>(null)
+
+  /**
+   * Der Anblick, der einen Motorwechsel ueberdauern soll.
+   *
+   * Ein Wechsel laedt das Dokument neu und setzt die Ansicht sonst zurueck.
+   * Genau beim Vergleichen der beiden Motoren waere das laestig: man will
+   * denselben Ausschnitt bei demselben Zoom sehen, nicht wieder die ganze
+   * Seite.
+   */
+  const wiederherstellenRef = useRef<Ansicht | null>(null)
 
   /**
    * Wie weit sich hineinzoomen laesst - abhaengig vom Einpassmaszstab, damit
@@ -406,22 +347,19 @@ export function PdfViewer({
    */
   const zeichneGrund = useCallback(async (buehne: Masze, blattMassstab: number, dichte: number) => {
     await reiheEin(grundSchlange.current, async (istAktuell, setzeLaufend) => {
-      const pdf = pdfDocRef.current
+      const blatt = blattRef.current
       const canvas = grundCanvasRef.current
-      const context = canvas?.getContext('2d')
-      if (!pdf || !canvas || !context) return
+      if (!blatt || !canvas || !istAktuell()) return
 
-      const page = await pdf.getPage(1)
-      if (!istAktuell()) return
-
-      const viewport = page.getViewport({ scale: blattMassstab * dichte })
-      canvas.width = Math.round(buehne.breite * dichte)
-      canvas.height = Math.round(buehne.hoehe * dichte)
-
-      const task = page.render({ canvasContext: context, viewport, canvas })
-      setzeLaufend(task)
+      const zeichnung = blatt.zeichne(
+        canvas,
+        { x: 0, y: 0, breite: buehne.breite, hoehe: buehne.hoehe },
+        blattMassstab,
+        dichte
+      )
+      setzeLaufend(zeichnung)
       try {
-        await task.promise
+        await zeichnung.fertig
         grundRef.current = dichte
       } catch (err) {
         if (!istAbbruch(err)) throw err
@@ -432,10 +370,6 @@ export function PdfViewer({
   /**
    * Nur der sichtbare Ausschnitt, dafuer punktgenau.
    *
-   * `transform` verschiebt die Zeichnung so, dass die linke obere Ecke des
-   * Ausschnitts auf dem Canvas bei (0,0) landet. Das ist der Weg, mit dem
-   * pdf.js einen Teilbereich zeichnet, ohne die ganze Seite aufzubauen.
-   *
    * Ein Buehnenpunkt entspricht auf dem Bildschirm `zoom` CSS-Punkten, also
    * `zoom * dichte` Geraetepunkten. Genau so viele Bildpunkte bekommt er hier -
    * deshalb ist das Ergebnis bei jedem Maszstab scharf.
@@ -445,31 +379,23 @@ export function PdfViewer({
       if (fenster.breite <= 0 || fenster.hoehe <= 0) return
 
       await reiheEin(scharfSchlange.current, async (istAktuell, setzeLaufend) => {
-        const pdf = pdfDocRef.current
+        const blatt = blattRef.current
         const canvas = scharfCanvasRef.current
-        const context = canvas?.getContext('2d')
-        if (!pdf || !canvas || !context) return
-
-        const page = await pdf.getPage(1)
+        if (!blatt || !canvas) return
         if (!istAktuell()) {
-          merke(verlaufRef.current, 'abgebrochen', 'ueberholt waehrend getPage')
+          merke(verlaufRef.current, 'abgebrochen', 'ueberholt vor dem Zeichnen')
           return
         }
 
-        const viewport = page.getViewport({ scale: blattMassstab * massstab })
-        canvas.width = Math.round(fenster.breite * massstab)
-        canvas.height = Math.round(fenster.hoehe * massstab)
-
-        const task = page.render({
-          canvasContext: context,
-          viewport,
-          canvas,
-          transform: [1, 0, 0, 1, -fenster.x * massstab, -fenster.y * massstab],
-        })
-        setzeLaufend(task)
+        // Die Uhr laeuft vor dem Aufruf, nicht danach: beide Motoren erledigen
+        // einen Teil der Arbeit noch synchron in `zeichne` selbst. Danach
+        // gemessen stand im Infofenster einmal "0 ms" fuer eine Zeichnung, die
+        // in Wahrheit gedauert hat.
         const beginn = Date.now()
+        const zeichnung = blatt.zeichne(canvas, fenster, blattMassstab, massstab)
+        setzeLaufend(zeichnung)
         try {
-          await task.promise
+          await zeichnung.fertig
           letzteDauerRef.current = Date.now() - beginn
           scharfRef.current = { fenster, massstab, einpass: blattMassstab }
           setScharf({ fenster, massstab })
@@ -499,7 +425,11 @@ export function PdfViewer({
   useEffect(() => {
     if (!seite || !einpass) return
     const dichte = geraeteDichte(window.devicePixelRatio)
-    void zeichneGrund({ breite: seite.breite * einpass, hoehe: seite.hoehe * einpass }, einpass, dichte)
+    void zeichneGrund(
+      { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass },
+      einpass,
+      dichte
+    )
   }, [seite, einpass, zeichneGrund])
 
   /**
@@ -539,15 +469,9 @@ export function PdfViewer({
     // Nichts tun, wenn der vorhandene Ausschnitt das Sichtbare noch abdeckt
     // *und* fein genug ist. Ohne diese Pruefung zeichnete jede Verschiebung um
     // einen Punkt die ganze Flaeche neu - dafuer ist der Rand ja da.
-    // Der Merker gilt nur fuer denselben Einpassmaszstab - sonst stehen die
-    // Buehnenkoordinaten darin fuer etwas anderes.
     const vorhanden = scharfRef.current?.einpass === einpass ? scharfRef.current : null
     const ohneRand = berechneSichtfenster(ansicht, buehne, flaeche, 0)
-    if (
-      vorhanden &&
-      liegtDrin(ohneRand, vorhanden.fenster) &&
-      vorhanden.massstab >= wunsch * 0.98
-    ) {
+    if (vorhanden && liegtDrin(ohneRand, vorhanden.fenster) && vorhanden.massstab >= wunsch * 0.98) {
       merke(
         verlaufRef.current,
         'uebersprungen',
@@ -596,8 +520,8 @@ export function PdfViewer({
       if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
       grund.marke++
       scharfS.marke++
-      grund.laufend?.cancel()
-      scharfS.laufend?.cancel()
+      grund.laufend?.abbrechen()
+      scharfS.laufend?.abbrechen()
     }
   }, [])
 
@@ -607,14 +531,12 @@ export function PdfViewer({
 
   useEffect(() => {
     let abgebrochen = false
-    // Die beiden Schlangen wechseln nie ihre Identitaet; sie hier festzuhalten
-    // ist trotzdem richtig, weil die Aufraeumfunktion sonst erst spaeter auf
-    // `.current` zugreift.
     const grundS = grundSchlange.current
     const scharfS = scharfSchlange.current
     setError(null)
     setSeite(null)
     setEinpass(null)
+    setSeitenImDokument(null)
     seiteRef.current = null
     einpassRef.current = null
     grundRef.current = null
@@ -624,23 +546,59 @@ export function PdfViewer({
     setAnsicht(ANSICHT_START)
 
     async function lade() {
-      try {
-        const token = getToken()
-        const auftrag = pdfjsLib.getDocument({
-          url: fileUrl,
-          httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
-        ladeAuftragRef.current = auftrag
-        const pdf = await auftrag.promise
-        if (abgebrochen) return
-        pdfDocRef.current = pdf
+      const token = getToken()
+      const kopfzeilen = token ? { Authorization: `Bearer ${token}` } : undefined
 
-        const ersteSeite = await pdf.getPage(1)
-        const grund = ersteSeite.getViewport({ scale: 1 })
-        const masze: Masze = { breite: grund.width, hoehe: grund.height }
+      /**
+       * Oeffnet mit dem gewaehlten Motor - und faellt auf den anderen zurueck,
+       * wenn das nicht geht.
+       *
+       * PDFium braucht eine 4,6 MB grosze wasm-Datei. Wird sie von einer
+       * Betriebsrichtlinie geblockt oder ist der Speicher zu knapp, waere der
+       * Plan sonst schlicht nicht mehr zu sehen. Der Rueckfall wird angezeigt
+       * und nicht verschwiegen.
+       */
+      async function oeffne(): Promise<{ dok: Dokument; kennung: MotorKennung }> {
+        try {
+          const gewaehlt = await motorFuer(motor)
+          return { dok: await gewaehlt.oeffne(fileUrl, kopfzeilen), kennung: motor }
+        } catch (err) {
+          const ersatz: MotorKennung = motor === 'pdfium' ? 'pdfjs' : 'pdfium'
+          merke(
+            verlaufRef.current,
+            'fehlgeschlagen',
+            `${MOTOR_NAME[motor]} nicht verfuegbar (${String(err)}) - Rueckfall auf ${MOTOR_NAME[ersatz]}`
+          )
+          const dok = await (await motorFuer(ersatz)).oeffne(fileUrl, kopfzeilen)
+          if (!abgebrochen) {
+            setMotorHinweis(
+              `${MOTOR_NAME[motor]} steht nicht zur Verfügung – ${MOTOR_NAME[ersatz]} zeichnet.`
+            )
+          }
+          return { dok, kennung: ersatz }
+        }
+      }
+
+      try {
+        const { dok, kennung } = await oeffne()
+        if (abgebrochen) {
+          void dok.schliesse()
+          return
+        }
+        dokRef.current = dok
+        setGenutzterMotor(kennung)
+        setSeitenImDokument(dok.seitenzahl)
+
+        const blatt = await dok.blatt(1)
+        if (abgebrochen) {
+          blatt.gibFrei()
+          return
+        }
+        blattRef.current = blatt
+
+        const masze = blatt.masze
         const flaeche = flaechenMasze()
         const eingepasst = flaeche ? berechneEinpassung(masze, flaeche) : null
-        if (abgebrochen) return
 
         seiteRef.current = masze
         einpassRef.current = eingepasst
@@ -649,17 +607,16 @@ export function PdfViewer({
         merke(
           verlaufRef.current,
           'geladen',
-          `Seite ${Math.round(masze.breite)} x ${Math.round(masze.hoehe)} pt, ` +
+          `${MOTOR_NAME[kennung]}: Seite ${Math.round(masze.breite)} x ${Math.round(masze.hoehe)} pt, ` +
             `Flaeche ${flaeche?.breite ?? '?'} x ${flaeche?.hoehe ?? '?'}, ` +
             `Einpassmaszstab ${eingepasst === null ? 'unbekannt' : eingepasst.toFixed(4)}`
         )
-        // Gezeichnet wird nicht hier, sondern in dem Effekt darueber - er ist
-        // die einzige Stelle, die den Zeichenmaszstab bestimmt. Von hier aus
-        // zusaetzlich zu zeichnen ergab dasselbe Bild ein zweites Mal.
-        // Ohne bekannte Flaeche wartet auch der: der ResizeObserver holt es
-        // nach, sobald sie Masze hat.
+        // Gezeichnet wird nicht hier, sondern in den Effekten darueber - sie
+        // sind die einzige Stelle, die den Zeichenmaszstab bestimmt.
         if (eingepasst === null) return
-        setzeAnsicht(ANSICHT_START)
+        const zurueck = wiederherstellenRef.current
+        wiederherstellenRef.current = null
+        setzeAnsicht(zurueck ?? { ...ANSICHT_START })
       } catch (err) {
         if (!abgebrochen) setError(String(err))
       }
@@ -668,23 +625,24 @@ export function PdfViewer({
     void lade()
     return () => {
       abgebrochen = true
-      // Erst abbrechen, dann freigeben: `destroy` waehrend einer laufenden
-      // Zeichnung bricht mit einer Ausnahme ab. Ohne das Freigeben bleibt bei
-      // jedem Planwechsel ein Dokument samt Arbeiter im Speicher zurueck.
+      // Erst abbrechen, dann freigeben: ein Schlieszen waehrend einer
+      // laufenden Zeichnung bricht mit einer Ausnahme ab, und bei PDFium liest
+      // die Zeichnung anschlieszend aus freigegebenem Speicher.
       //
       // Die Marke hochzuzaehlen ist dabei das Entscheidende: ein Auftrag, der
-      // gerade in getPage haengt, gilt danach als ueberholt und fasst kein
-      // Canvas mehr an.
+      // gerade wartet, gilt danach als ueberholt und fasst kein Canvas mehr an.
       grundS.marke++
       scharfS.marke++
-      grundS.laufend?.cancel()
-      scharfS.laufend?.cancel()
-      pdfDocRef.current = null
-      const auftrag = ladeAuftragRef.current
-      ladeAuftragRef.current = null
-      void auftrag?.destroy().catch(() => {})
+      grundS.laufend?.abbrechen()
+      scharfS.laufend?.abbrechen()
+      const blatt = blattRef.current
+      const dok = dokRef.current
+      blattRef.current = null
+      dokRef.current = null
+      blatt?.gibFrei()
+      void dok?.schliesse()
     }
-  }, [fileUrl, neuVersuch, setzeAnsicht])
+  }, [fileUrl, neuVersuch, motor, setzeAnsicht])
 
   /**
    * Haelt den Einpassmaszstab nach, wenn sich die Flaeche aendert - beim
@@ -751,13 +709,25 @@ export function PdfViewer({
     setzeAnsicht({ ...ANSICHT_START })
   }, [setzeAnsicht])
 
+  /** Motor umschalten - der Anblick bleibt, damit sich vergleichen laesst. */
+  function wechsleMotor() {
+    const naechster: MotorKennung = motor === 'pdfium' ? 'pdfjs' : 'pdfium'
+    wiederherstellenRef.current = ansicht
+    setMotorHinweis(null)
+    setMotor(naechster)
+    try {
+      window.localStorage.setItem(MOTOR_SPEICHER, naechster)
+    } catch {
+      // Die Wahl gilt dann nur fuer diese Sitzung.
+    }
+  }
+
   /**
    * Rad und Trackpad.
    *
    * Der Lauscher haengt auf der *ganzen* Flaeche, nicht nur auf dem Blatt.
    * Vorher sasz er auf der Zeichnung selbst: neben einem herausgezoomten Plan
-   * kam er gar nicht an, und der Browser zoomte stattdessen die ganze Seite -
-   * genau die gemeldete Beobachtung am Trackpad.
+   * kam er gar nicht an, und der Browser zoomte stattdessen die ganze Seite.
    *
    * Ein Kneifen auf dem Trackpad meldet der Browser als Rad mit gedruecktem
    * Strg; zwei Finger ohne Modifikator sind ein Schwenken in beiden Achsen.
@@ -817,8 +787,6 @@ export function PdfViewer({
 
     if (zeigerRef.current.size >= 2) {
       // Zweiter Finger: aus Schwenken wird Kneifen, und aus dem Tippen nichts.
-      // Neu berechnet auch beim dritten Finger, damit das Paar nach dem
-      // Absetzen eines Fingers nicht mit veralteten Werten weiterrechnet.
       gesteRef.current = zeigerPaar()
       tippRef.current = null
       schwenkRef.current = null
@@ -874,8 +842,6 @@ export function PdfViewer({
       e.currentTarget.setPointerCapture(e.pointerId)
     }
 
-    // Schwenken gilt jetzt fuer *alle* Zeigerarten. Vorher war die Maus
-    // ausgenommen und man kam am Rechner nur ueber die Scrollbalken weiter.
     if (start.verschoben) {
       const dx = stelle.x - schwenk.x
       const dy = stelle.y - schwenk.y
@@ -901,9 +867,9 @@ export function PdfViewer({
     if (start.verschoben || Date.now() - start.zeit > TIPP_HOECHSTDAUER_MS) return
 
     // Nur Treffer auf dem Blatt legen ein Ticket an - daneben ist leere Flaeche.
-    const buehne = buehneRef.current
-    if (!buehne) return
-    const rect = buehne.getBoundingClientRect()
+    const buehneEl = buehneRef.current
+    if (!buehneEl) return
+    const rect = buehneEl.getBoundingClientRect()
     const relX = (e.clientX - rect.left) / rect.width
     const relY = (e.clientY - rect.top) / rect.height
     if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return
@@ -957,28 +923,33 @@ export function PdfViewer({
     return (
       <div className="plan-flaeche plan-flaeche-fehler">
         <p className="hinweis hinweis-fehler">PDF konnte nicht geladen werden: {error}</p>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setNeuVersuch((c) => c + 1)}>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setNeuVersuch((c) => c + 1)}
+        >
           Erneut versuchen
         </button>
       </div>
     )
   }
 
-  const buehne = seite && einpass ? { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass } : null
+  const buehne =
+    seite && einpass ? { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass } : null
+  const seitenGesamt = seitenImDokument ?? seitenzahl ?? null
 
   /**
    * Die Werte fuer das Infofenster - erst beim Oeffnen zusammengetragen,
    * damit im Normalbetrieb nichts davon Arbeit macht.
    */
   async function oeffneDiagnose() {
-    const grund = sammleDiagnose(null)
-    setDiagnose(grund)
-    // Der Inhalt wird nachgereicht: das Durchgehen der Zeichenbefehle dauert
+    setDiagnose(sammleDiagnose(null))
+    // Der Inhalt wird nachgereicht: das Durchgehen der Seitenobjekte dauert
     // bei einem groszen Plan einen Moment, und das Fenster soll sofort stehen.
-    const pdf = pdfDocRef.current
-    if (!pdf || !seite) return
+    const dok = dokRef.current
+    if (!dok) return
     try {
-      const inhalt = await untersucheInhalt(pdf, seite)
+      const inhalt = await dok.untersuche(1)
       setDiagnose((v) => (v ? { ...v, inhalt } : v))
     } catch {
       /* Ohne Inhaltsbefund bleibt der Rest brauchbar. */
@@ -992,15 +963,12 @@ export function PdfViewer({
     const grundCanvas = grundCanvasRef.current
     const benoetigt =
       buehne && flaeche
-        ? berechneScharfMassstab(
-            ansicht.zoom,
-            dichte,
-            berechneSichtfenster(ansicht, buehne, flaeche)
-          )
+        ? berechneScharfMassstab(ansicht.zoom, dichte, berechneSichtfenster(ansicht, buehne, flaeche))
         : null
 
     return {
       inhalt,
+      motor: genutzterMotor,
       stand: __BUILD_COMMIT__,
       gebaut: new Date(__BUILD_DATE__).toLocaleDateString('de-DE'),
       seite,
@@ -1019,7 +987,7 @@ export function PdfViewer({
         benoetigt,
         letzteDauerMs: letzteDauerRef.current,
       },
-      fehler: zeichenFehler,
+      fehler: zeichenFehler ?? motorHinweis,
       verlauf: [...verlaufRef.current],
     }
   }
@@ -1116,12 +1084,7 @@ export function PdfViewer({
           <Zeichen name="minus" />
         </button>
         {/* Prozent der *natuerlichen* Groesze der Seite - dieselbe Zaehlweise
-            wie in Acrobat und jedem anderen Betrachter.
-            Vorher stand hier "Prozent des Einpassens". Das klang sinnvoll, war
-            aber mit nichts vergleichbar: bei einem Plan von 195 x 84 cm zeigte
-            die Leiste "800 %", gemeint waren 132 % natuerliche Groesze - ein
-            Sechstel dessen, was in Acrobat unter 800 % steht. Genau daran ist
-            eine Fehlersuche gescheitert. */}
+            wie in Acrobat und jedem anderen Betrachter. */}
         <button
           type="button"
           className="pdf-zoom-wert"
@@ -1149,9 +1112,19 @@ export function PdfViewer({
         >
           <Zeichen name="einpassen" />
         </button>
-        {/* Sagt, was die Ansicht gerade tut. Steht hier und nicht in einem
-            versteckten Entwicklermodus: gebraucht wird es genau dann, wenn
-            jemand im Betrieb etwas meldet. */}
+        {/* Der Umschalter steht sichtbar in der Leiste und nicht in einem
+            versteckten Entwicklermodus: gebraucht wird er genau dann, wenn
+            jemand im Betrieb eine Darstellung beanstandet. Der Anblick bleibt
+            dabei stehen, sodass sich derselbe Ausschnitt vergleichen laesst. */}
+        <button
+          type="button"
+          className="pdf-motor-knopf"
+          onClick={wechsleMotor}
+          title={`Zeichenmotor: ${MOTOR_NAME[genutzterMotor]}. Umschalten auf ${MOTOR_NAME[genutzterMotor === 'pdfium' ? 'pdfjs' : 'pdfium']}.`}
+        >
+          {MOTOR_NAME[genutzterMotor]}
+        </button>
+        {/* Sagt, was die Ansicht gerade tut. */}
         <button
           type="button"
           className="icon-btn"
@@ -1164,9 +1137,9 @@ export function PdfViewer({
         {/* Der Betrachter zeigt Seite 1, und neue Tickets werden auf Seite 1
             geschrieben. Bei einem mehrseitigen PDF waere der Rest sonst
             stillschweigend unerreichbar. */}
-        {typeof seitenzahl === 'number' && seitenzahl > 1 && (
+        {typeof seitenGesamt === 'number' && seitenGesamt > 1 && (
           <span className="pdf-zoom-hinweis" title="Mehrseitige Pläne werden nicht unterstützt">
-            Seite 1 von {seitenzahl}
+            Seite 1 von {seitenGesamt}
           </span>
         )}
         {/* Ohne diese Anzeige war der Fehlerfall unsichtbar: der Plan blieb
@@ -1176,6 +1149,10 @@ export function PdfViewer({
           <span className="pdf-zoom-hinweis pdf-zoom-hinweis-fehler" title={zeichenFehler}>
             Scharfzeichnen fehlgeschlagen
           </span>
+        ) : motorHinweis ? (
+          <span className="pdf-zoom-hinweis pdf-zoom-hinweis-fehler" title={motorHinweis}>
+            Ersatzmotor
+          </span>
         ) : (
           schaerfeLaeuft && (
             <span className="pdf-zoom-hinweis pdf-zoom-hinweis-laeuft">wird geschärft …</span>
@@ -1183,9 +1160,7 @@ export function PdfViewer({
         )}
       </div>
 
-      {diagnose && (
-        <PlanDiagnoseDialog diagnose={diagnose} onClose={() => setDiagnose(null)} />
-      )}
+      {diagnose && <PlanDiagnoseDialog diagnose={diagnose} onClose={() => setDiagnose(null)} />}
     </div>
   )
 }

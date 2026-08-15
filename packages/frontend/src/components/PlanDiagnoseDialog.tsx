@@ -120,6 +120,11 @@ export function PlanDiagnoseDialog({ diagnose, onClose }: Props) {
 
         <div className="modal-body">
           <p className={`hinweis ${gut ? '' : 'hinweis-fehler'}`}>{urteil}</p>
+          <p className="hinweis">
+            Gezeichnet von <strong>{diagnose.motor === 'pdfium' ? 'PDFium' : 'pdf.js'}</strong>. Über
+            den Knopf in der Zoomleiste lässt sich der andere Motor einschalten – sieht derselbe
+            Ausschnitt dort gleich aus, liegt es nicht am Motor.
+          </p>
 
           <label className="field">
             <span className="field-label">Auszug zum Weitergeben</span>

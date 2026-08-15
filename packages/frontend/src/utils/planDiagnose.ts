@@ -59,6 +59,11 @@ export interface Masze {
  * bestimmten Zoom schlicht keine weitere Bildinformation vorhanden, und *kein*
  * Betrachter kann daran etwas aendern. Von auszen sehen beide Faelle beim
  * Hineinzoomen gleich aus.
+ *
+ * Die Zaehlweise haengt am Motor und ist deshalb *nicht* zwischen beiden
+ * vergleichbar: PDFium zaehlt Seitenobjekte, pdf.js Zeichenbefehle. Ein Plan
+ * kann bei dem einen 940 und bei dem anderen 3100 Linienzuege ergeben. Worauf
+ * es ankommt, ist beiden gemeinsam - naemlich ob die Zahl null ist.
  */
 export interface Inhaltsbefund {
   bilder: number
@@ -81,6 +86,18 @@ export function bilddehnung(befund: Inhaltsbefund | null, dpiGezeichnet: number)
 export interface PlanDiagnose {
   stand: string
   gebaut: string
+  /**
+   * Welcher Motor gezeichnet hat.
+   *
+   * Steht mit im Auszug, weil sich die Ansicht umschalten laesst: ohne diese
+   * Zeile waere aus einer Rueckmeldung nicht zu erkennen, worauf sie sich
+   * bezieht - und genau daran haengt die Frage, ob es am Motor liegt.
+   *
+   * Die Kennung steht bewusst hier ausgeschrieben und wird nicht aus
+   * pdfMotor.ts eingezogen: dort wird `Inhaltsbefund` von hier gebraucht, und
+   * zwei Module, die einander brauchen, sind eine Falle fuer spaeter.
+   */
+  motor: 'pdfium' | 'pdfjs'
   inhalt: Inhaltsbefund | null
   seite: Masze | null
   einpass: number | null
@@ -163,6 +180,7 @@ function inhaltsZeilen(d: PlanDiagnose): string[] {
 export function alsText(d: PlanDiagnose, jetzt: number): string {
   const zeilen = [
     `Stand        ${d.stand} · ${d.gebaut}`,
+    `Motor        ${d.motor === 'pdfium' ? 'PDFium (WebAssembly)' : 'pdf.js'}`,
     `Browser      Punktdichte ${d.punktdichte} · Fläche ${masze(d.flaeche)}`,
     `Seite        ${masze(d.seite)} pt · Einpassmaßstab ${zahl(d.einpass, 4)}`,
     // Beide Zaehlweisen nebeneinander: `zoom` zaehlt in Vielfachen des

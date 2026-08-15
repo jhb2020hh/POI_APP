@@ -1800,6 +1800,25 @@ textarea {
   color: var(--color-text);
 }
 
+/* Umschalter zwischen PDFium und pdf.js. Bewusst mit Namen statt Symbol: ein
+   Bild fuer "Zeichenmotor" gibt es nicht, und wer ihn braucht, muss wissen,
+   welcher gerade laeuft. */
+.pdf-motor-knopf {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--schrift-mini);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pdf-motor-knopf:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
 .pdf-zoom-hinweis {
   padding: 0 6px;
   border-left: 1px solid var(--color-border);

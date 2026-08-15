@@ -297,3 +297,50 @@ export function berechneScharfMassstab(
   const nachFlaeche = Math.sqrt(CANVAS_FLAECHE_MAX / (fenster.breite * fenster.hoehe))
   return Math.min(gewuenscht, nachKante, nachFlaeche)
 }
+
+/**
+ * Was ein Motor braucht, um genau einen Ausschnitt zu zeichnen.
+ *
+ * Beide Motoren zeichnen einen Teilbereich auf dieselbe Weise: die *ganze*
+ * Seite wird in einem Maszstab aufgespannt und so verschoben, dass die linke
+ * obere Ecke des Ausschnitts auf dem Bild bei (0,0) liegt. Das Bild selbst ist
+ * nur so grosz wie der Ausschnitt - deshalb bleibt der Aufwand vom Zoom
+ * unabhaengig.
+ */
+export interface Kachel {
+  /** Bildpunkte des Canvas. */
+  breite: number
+  hoehe: number
+  /** Maszstab der *ganzen* Seite: ein PDF-Punkt zu so vielen Bildpunkten. */
+  seitenMassstab: number
+  /**
+   * Wohin die linke obere Ecke der ganzen Seite faellt, in Bildpunkten des
+   * Canvas. Negativ, sobald der Ausschnitt nicht am Blattanfang beginnt.
+   */
+  versatzX: number
+  versatzY: number
+}
+
+/**
+ * Die Kachelrechnung - einmal, fuer beide Motoren.
+ *
+ * Sie steht hier und nicht zweimal in den Motoren: ein Vorzeichenfehler darin
+ * zeigte sich als verschobenes oder unscharfes Bild, ohne dass irgendetwas
+ * meldet. Hier ist sie ohne Browser nachrechenbar.
+ *
+ * `fenster` steht in Buehnenkoordinaten (PDF-Punkte mal `blattMassstab`),
+ * `massstab` sagt, wie viele Bildpunkte auf einen Buehnenpunkt kommen.
+ */
+export function rechneKachel(
+  fenster: Rechteck,
+  blattMassstab: number,
+  massstab: number
+): Kachel {
+  return {
+    breite: Math.max(1, Math.round(fenster.breite * massstab)),
+    hoehe: Math.max(1, Math.round(fenster.hoehe * massstab)),
+    seitenMassstab: blattMassstab * massstab,
+    versatzX: -fenster.x * massstab,
+    versatzY: -fenster.y * massstab,
+  }
+}

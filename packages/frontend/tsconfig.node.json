@@ -7,7 +7,8 @@
     "skipLibCheck": true,
 
     /* Bundler mode */
-    "module": "nodenext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
@@ -19,5 +20,17 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  /*
+   * Die Pruefskripte gehoeren mit hinein.
+   *
+   * Vorher stand hier nur die vite.config, und die Skripte liefen ausschlieszlich
+   * ueber tsx - der prueft keine Typen. Als `PlanDiagnose` ein Feld dazubekam,
+   * lief diagnose:ansicht weiter gruen durch und schrieb an der Stelle stumm
+   * einen falschen Wert. Ein Pruefstand, der eine Aenderung nicht bemerkt,
+   * ist schlimmer als keiner.
+   *
+   * `moduleResolution: bundler` statt nodenext, weil die Skripte die Module aus
+   * src ohne Dateiendung einziehen - genauso, wie es die Anwendung tut.
+   */
+  "include": ["vite.config.ts", "scripts"]
 }
