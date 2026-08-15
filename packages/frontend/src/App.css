@@ -1813,6 +1813,26 @@ textarea {
   font-weight: 600;
 }
 
+/* Infofenster zur Planansicht. Feste Schrittweite, damit die Spalten des
+   Auszugs stehen - er wird kopiert und weitergegeben. */
+.diagnose-text {
+  width: 100%;
+  font-family: var(--mono, ui-monospace, "Cascadia Mono", "Consolas", monospace);
+  font-size: var(--schrift-mini);
+  line-height: 1.45;
+  white-space: pre;
+  overflow-x: auto;
+  resize: vertical;
+}
+
+.diagnose-knopfleiste {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 /* Blendet sich erst nach zwei Sekunden ein. Im Normalfall ist das Schaerfen
    nach einem Wimpernschlag durch und die Anzeige bleibt unsichtbar; bleibt sie
    stehen, hakt etwas - und man sieht es, statt nur einen unscharfen Plan vor

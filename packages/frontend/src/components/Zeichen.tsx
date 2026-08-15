@@ -44,6 +44,7 @@ const PFADE = {
   'pfeil-hoch': 'M12 20V5M6 11l6-6 6 6',
   'pfeil-runter': 'M12 4v15M6 13l6 6 6-6',
   einpassen: 'M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 8h.01',
 } as const
 
 export type ZeichenName = keyof typeof PFADE

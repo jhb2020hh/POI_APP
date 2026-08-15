@@ -29,6 +29,12 @@ import {
   type Ansicht,
   type Masze,
 } from '../src/utils/planAnsicht'
+import {
+  VERLAUF_LAENGE,
+  alsText,
+  schreibeVerlauf,
+  type Verlaufseintrag,
+} from '../src/utils/planDiagnose'
 
 let allesOk = true
 
@@ -282,6 +288,50 @@ for (const zoom of [1, 2, 4, ZOOM_MAX]) {
 // muesste gekuerzt werden. Genau dieser Fall trat vorher bei *jedem* Zoom ein.
 const uebergrosz = berechneScharfMassstab(8, 2, { breite: 3370, hoehe: 2384 })
 melde(uebergrosz < 16, 'ein uebergroszes Fenster wird gekuerzt statt leer geliefert', `${uebergrosz}`)
+
+console.log('')
+console.log('8. Verlauf der Zeichenentscheidungen')
+
+// Der Verlauf ist das Werkzeug, mit dem sich "der Plan ist unscharf" in eine
+// beantwortbare Frage verwandelt. Wenn er ueberlaeuft oder Wiederholungen
+// nicht zusammenfasst, verdraengt ein einziger Zoomvorgang genau die Zeilen,
+// wegen derer er da ist.
+const puffer: Verlaufseintrag[] = []
+for (let i = 0; i < 40; i++) schreibeVerlauf(puffer, 'geplant', 'gleicher Text', 1000 + i)
+melde(puffer.length === 1, 'gleiche Eintraege werden zusammengefasst', `${puffer.length} statt 1`)
+melde(puffer[0].anzahl === 40, 'die Anzahl wird mitgezaehlt', `${puffer[0].anzahl} statt 40`)
+melde(puffer[0].zeit === 1039, 'der Zeitstempel wandert auf den letzten mit', `${puffer[0].zeit}`)
+
+for (let i = 0; i < 40; i++) schreibeVerlauf(puffer, 'gezeichnet', `Lauf ${i}`, 2000 + i)
+melde(
+  puffer.length === VERLAUF_LAENGE,
+  'der Ringpuffer haelt seine Laenge',
+  `${puffer.length} statt ${VERLAUF_LAENGE}`
+)
+melde(
+  puffer[puffer.length - 1].text === 'Lauf 39',
+  'der neueste Eintrag bleibt erhalten',
+  puffer[puffer.length - 1].text
+)
+
+const auszug = alsText(
+  {
+    stand: 'abc1234', gebaut: '15.08.2026',
+    seite: { breite: 2384, hoehe: 1684 }, einpass: 0.4964, zoom: 8,
+    verschiebung: { x: -3054, y: -2613 },
+    flaeche: { breite: 1400, hoehe: 860 }, punktdichte: 1,
+    grundBitmap: { breite: 1183, hoehe: 836 },
+    scharf: {
+      sichtbar: true, fenster: { x: 346.7, y: 305.1, breite: 245, hoehe: 150.5 },
+      bitmap: { breite: 1960, hoehe: 1204 }, massstab: 8, benoetigt: 8, letzteDauerMs: 42,
+    },
+    fehler: null, verlauf: puffer,
+  },
+  2100
+)
+melde(auszug.includes('Maßstab  8.00 · benötigt 8.00'), 'der Auszug nennt vorhandenen und noetigen Maszstab')
+melde(auszug.includes('Lauf 39'), 'der Auszug enthaelt den Verlauf')
+melde(!auszug.includes('undefined') && !auszug.includes('NaN'), 'der Auszug enthaelt keine Luecken')
 
 console.log('')
 console.log(allesOk ? 'Ergebnis: alles in Ordnung.' : 'Ergebnis: es gibt Abweichungen.')

@@ -4,6 +4,12 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs
 import type { Category, Point } from '@poi-app/shared'
 import { getToken } from '../api/client'
 import { Zeichen } from './Zeichen'
+import { PlanDiagnoseDialog } from './PlanDiagnoseDialog'
+import {
+  schreibeVerlauf,
+  type PlanDiagnose,
+  type Verlaufseintrag,
+} from '../utils/planDiagnose'
 import {
   ANSICHT_START,
   ZOOM_MAX,
@@ -115,6 +121,26 @@ function istAbbruch(fehler: unknown): boolean {
 }
 
 /**
+ * Haelt eine Entscheidung des Schaerfe-Effekts fest.
+ *
+ * Der Verlauf beantwortet die Frage, die eine zweimal gescheiterte Fehlersuche
+ * offenliesz: *passiert ueberhaupt etwas?* Ringpuffer in einem Ref - er loest
+ * keinen Renderdurchlauf aus und aendert am Verhalten nichts.
+ */
+function merke(
+  puffer: Verlaufseintrag[],
+  was: Verlaufseintrag['was'],
+  text: string
+): void {
+  schreibeVerlauf(puffer, was, text, Date.now())
+}
+
+/** Zahl mit zwei Nachkommastellen, ohne Laendereinstellungen. */
+function z2(wert: number): string {
+  return wert.toFixed(2)
+}
+
+/**
  * Die Planansicht.
  *
  * Der tragende Gedanke: Sehen und Zeichnen sind getrennt.
@@ -199,6 +225,11 @@ export function PdfViewer({
    * Sekunden ein (rein ueber CSS), damit der Normalfall unsichtbar bleibt.
    */
   const [schaerfeLaeuft, setSchaerfeLaeuft] = useState(false)
+  /** Siehe Verlaufseintrag: beantwortet, ob ueberhaupt etwas passiert. */
+  const verlaufRef = useRef<Verlaufseintrag[]>([])
+  /** Dauer der letzten erfolgreichen Zeichnung der Scharfebene, in ms. */
+  const letzteDauerRef = useRef<number | null>(null)
+  const [diagnoseOffen, setDiagnoseOffen] = useState(false)
 
   /**
    * Seitengroesze und Einpassmaszstab zusaetzlich als Ref.
@@ -312,7 +343,10 @@ export function PdfViewer({
         if (!pdf || !canvas || !context) return
 
         const page = await pdf.getPage(1)
-        if (!istAktuell()) return
+        if (!istAktuell()) {
+          merke(verlaufRef.current, 'abgebrochen', 'ueberholt waehrend getPage')
+          return
+        }
 
         const viewport = page.getViewport({ scale: blattMassstab * massstab })
         canvas.width = Math.round(fenster.breite * massstab)
@@ -325,14 +359,28 @@ export function PdfViewer({
           transform: [1, 0, 0, 1, -fenster.x * massstab, -fenster.y * massstab],
         })
         setzeLaufend(task)
+        const beginn = Date.now()
         try {
           await task.promise
+          letzteDauerRef.current = Date.now() - beginn
           scharfRef.current = { fenster, massstab, einpass: blattMassstab }
           setScharf({ fenster, massstab })
           setZeichenFehler(null)
           setSchaerfeLaeuft(false)
+          merke(
+            verlaufRef.current,
+            'gezeichnet',
+            `Maszstab ${z2(massstab)}, Bitmap ${canvas.width}x${canvas.height}, ` +
+              `Fenster ${Math.round(fenster.breite)}x${Math.round(fenster.hoehe)} ` +
+              `bei ${Math.round(fenster.x)}/${Math.round(fenster.y)}, ` +
+              `${letzteDauerRef.current} ms`
+          )
         } catch (err) {
-          if (!istAbbruch(err)) throw err
+          if (!istAbbruch(err)) {
+            merke(verlaufRef.current, 'fehlgeschlagen', String(err))
+            throw err
+          }
+          merke(verlaufRef.current, 'abgebrochen', 'Zeichnung abgebrochen')
         }
       })
     },
@@ -363,12 +411,22 @@ export function PdfViewer({
     // Flaeche ohne Hoehe kam ein Ausschnitt der Hoehe null heraus, den
     // zeichneScharf stillschweigend verwarf. Die Scharfebene waere dann nie
     // entstanden, ohne dass irgendetwas darauf hingewiesen haette.
-    if (!flaeche || flaeche.breite <= 0 || flaeche.hoehe <= 0) return
+    if (!flaeche || flaeche.breite <= 0 || flaeche.hoehe <= 0) {
+      merke(
+        verlaufRef.current,
+        'uebersprungen',
+        `Flaeche ohne Masze (${flaeche?.breite ?? '?'} x ${flaeche?.hoehe ?? '?'})`
+      )
+      return
+    }
 
     const dichte = geraeteDichte(window.devicePixelRatio)
     const mitRand = berechneSichtfenster(ansicht, buehne, flaeche)
     const wunsch = berechneScharfMassstab(ansicht.zoom, dichte, mitRand)
-    if (mitRand.breite <= 0 || mitRand.hoehe <= 0) return
+    if (mitRand.breite <= 0 || mitRand.hoehe <= 0) {
+      merke(verlaufRef.current, 'uebersprungen', 'Sichtfenster ohne Masze')
+      return
+    }
 
     // Nichts tun, wenn der vorhandene Ausschnitt das Sichtbare noch abdeckt
     // *und* fein genug ist. Ohne diese Pruefung zeichnete jede Verschiebung um
@@ -382,12 +440,23 @@ export function PdfViewer({
       liegtDrin(ohneRand, vorhanden.fenster) &&
       vorhanden.massstab >= wunsch * 0.98
     ) {
+      merke(
+        verlaufRef.current,
+        'uebersprungen',
+        `Ausschnitt reicht noch: vorhanden ${z2(vorhanden.massstab)}, noetig ${z2(wunsch)}`
+      )
       return
     }
 
     // Beim ersten Ausschnitt sofort: sonst saehe man den Plan zwar, aber
     // 150 ms lang nur in der groben Grundebene.
     const verzoegerung = vorhanden ? NACHSCHAERFEN_MS : 0
+    merke(
+      verlaufRef.current,
+      'geplant',
+      `Maszstab ${z2(wunsch)} (vorhanden ${vorhanden ? z2(vorhanden.massstab) : 'keiner'}), ` +
+        `Zoom ${z2(ansicht.zoom)}, Punktdichte ${dichte}, in ${verzoegerung} ms`
+    )
     setSchaerfeLaeuft(true)
     if (schaerfenRef.current) window.clearTimeout(schaerfenRef.current)
     schaerfenRef.current = window.setTimeout(() => {
@@ -469,6 +538,13 @@ export function PdfViewer({
         einpassRef.current = eingepasst
         setSeite(masze)
         setEinpass(eingepasst)
+        merke(
+          verlaufRef.current,
+          'geladen',
+          `Seite ${Math.round(masze.breite)} x ${Math.round(masze.hoehe)} pt, ` +
+            `Flaeche ${flaeche?.breite ?? '?'} x ${flaeche?.hoehe ?? '?'}, ` +
+            `Einpassmaszstab ${eingepasst === null ? 'unbekannt' : eingepasst.toFixed(4)}`
+        )
         // Gezeichnet wird nicht hier, sondern in dem Effekt darueber - er ist
         // die einzige Stelle, die den Zeichenmaszstab bestimmt. Von hier aus
         // zusaetzlich zu zeichnen ergab dasselbe Bild ein zweites Mal.
@@ -782,6 +858,47 @@ export function PdfViewer({
 
   const buehne = seite && einpass ? { breite: seite.breite * einpass, hoehe: seite.hoehe * einpass } : null
 
+  /**
+   * Die Werte fuer das Infofenster - erst beim Oeffnen zusammengetragen,
+   * damit im Normalbetrieb nichts davon Arbeit macht.
+   */
+  function sammleDiagnose(): PlanDiagnose {
+    const flaeche = flaechenMasze()
+    const dichte = geraeteDichte(window.devicePixelRatio)
+    const scharfCanvas = scharfCanvasRef.current
+    const grundCanvas = grundCanvasRef.current
+    const benoetigt =
+      buehne && flaeche
+        ? berechneScharfMassstab(
+            ansicht.zoom,
+            dichte,
+            berechneSichtfenster(ansicht, buehne, flaeche)
+          )
+        : null
+
+    return {
+      stand: __BUILD_COMMIT__,
+      gebaut: new Date(__BUILD_DATE__).toLocaleDateString('de-DE'),
+      seite,
+      einpass,
+      zoom: ansicht.zoom,
+      verschiebung: { x: ansicht.x, y: ansicht.y },
+      flaeche,
+      punktdichte: dichte,
+      grundBitmap: grundCanvas ? { breite: grundCanvas.width, hoehe: grundCanvas.height } : null,
+      scharf: {
+        sichtbar: scharf !== null,
+        fenster: scharf?.fenster ?? null,
+        bitmap: scharfCanvas ? { breite: scharfCanvas.width, hoehe: scharfCanvas.height } : null,
+        massstab: scharf?.massstab ?? null,
+        benoetigt,
+        letzteDauerMs: letzteDauerRef.current,
+      },
+      fehler: zeichenFehler,
+      verlauf: [...verlaufRef.current],
+    }
+  }
+
   return (
     <div
       ref={flaecheRef}
@@ -903,6 +1020,18 @@ export function PdfViewer({
         >
           <Zeichen name="einpassen" />
         </button>
+        {/* Sagt, was die Ansicht gerade tut. Steht hier und nicht in einem
+            versteckten Entwicklermodus: gebraucht wird es genau dann, wenn
+            jemand im Betrieb etwas meldet. */}
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => setDiagnoseOffen(true)}
+          title="Angaben zur Darstellung"
+          aria-label="Angaben zur Darstellung"
+        >
+          <Zeichen name="info" />
+        </button>
         {/* Der Betrachter zeigt Seite 1, und neue Tickets werden auf Seite 1
             geschrieben. Bei einem mehrseitigen PDF waere der Rest sonst
             stillschweigend unerreichbar. */}
@@ -924,6 +1053,10 @@ export function PdfViewer({
           )
         )}
       </div>
+
+      {diagnoseOffen && (
+        <PlanDiagnoseDialog diagnose={sammleDiagnose()} onClose={() => setDiagnoseOffen(false)} />
+      )}
     </div>
   )
 }
