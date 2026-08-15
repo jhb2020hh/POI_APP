@@ -12,7 +12,7 @@ import {
 } from '../utils/planDiagnose'
 import {
   ANSICHT_START,
-  ZOOM_MAX,
+  berechneZoomMax,
   ZOOM_MIN,
   ZOOM_STUFE,
   begrenzeVerschiebung,
@@ -242,6 +242,15 @@ export function PdfViewer({
    */
   const einpassRef = useRef<number | null>(null)
   const seiteRef = useRef<Masze | null>(null)
+
+  /**
+   * Wie weit sich hineinzoomen laesst - abhaengig vom Einpassmaszstab, damit
+   * die Grenze in natuerlicher Groesze zaehlt und nicht in Vielfachen des
+   * Einpassens. Siehe berechneZoomMax.
+   */
+  const zoomMax = berechneZoomMax(einpass)
+  const zoomMaxRef = useRef(zoomMax)
+  zoomMaxRef.current = zoomMax
 
   function flaechenMasze(): Masze | null {
     const el = flaecheRef.current
@@ -634,7 +643,7 @@ export function PdfViewer({
   const zoomeUm = useCallback(
     (faktor: number, punkt?: { x: number; y: number }) => {
       const ziel = punkt ?? mitteDerFlaeche()
-      setzeAnsicht((v) => zoomeAufPunkt(v, ziel, faktor))
+      setzeAnsicht((v) => zoomeAufPunkt(v, ziel, faktor, zoomMaxRef.current))
     },
     [setzeAnsicht]
   )
@@ -749,7 +758,7 @@ export function PdfViewer({
       }
       gesteRef.current = jetzt
       setzeAnsicht((v) => {
-        const gezoomt = zoomeAufPunkt(v, jetzt.mitte, faktor)
+        const gezoomt = zoomeAufPunkt(v, jetzt.mitte, faktor, zoomMaxRef.current)
         return { zoom: gezoomt.zoom, x: gezoomt.x + versatz.x, y: gezoomt.y + versatz.y }
       })
       return
@@ -882,6 +891,7 @@ export function PdfViewer({
       seite,
       einpass,
       zoom: ansicht.zoom,
+      zoomMax,
       verschiebung: { x: ansicht.x, y: ansicht.y },
       flaeche,
       punktdichte: dichte,
@@ -990,22 +1000,26 @@ export function PdfViewer({
         >
           <Zeichen name="minus" />
         </button>
-        {/* 100 % heiszt "ganze Seite sichtbar". Gegen einen festen Startwert zu
-            rechnen ergab je nach Planformat voellig verschiedene Zahlen fuer
-            denselben Anblick. */}
+        {/* Prozent der *natuerlichen* Groesze der Seite - dieselbe Zaehlweise
+            wie in Acrobat und jedem anderen Betrachter.
+            Vorher stand hier "Prozent des Einpassens". Das klang sinnvoll, war
+            aber mit nichts vergleichbar: bei einem Plan von 195 x 84 cm zeigte
+            die Leiste "800 %", gemeint waren 132 % natuerliche Groesze - ein
+            Sechstel dessen, was in Acrobat unter 800 % steht. Genau daran ist
+            eine Fehlersuche gescheitert. */}
         <button
           type="button"
           className="pdf-zoom-wert"
           onClick={passeEinAn}
           title="Auf ganze Seite zurücksetzen (Taste 0)"
         >
-          {Math.round(ansicht.zoom * 100)}%
+          {Math.round(ansicht.zoom * (einpass ?? 1) * 100)}%
         </button>
         <button
           type="button"
           className="icon-btn"
           onClick={() => zoomeUm(ZOOM_STUFE)}
-          disabled={ansicht.zoom >= ZOOM_MAX}
+          disabled={ansicht.zoom >= zoomMax - 0.001}
           title="Vergrößern (Plustaste)"
           aria-label="Vergrößern"
         >

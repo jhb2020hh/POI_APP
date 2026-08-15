@@ -14,8 +14,9 @@ import {
   CANVAS_FLAECHE_MAX,
   CANVAS_KANTE_MAX,
   DICHTE_MAX,
-  ZOOM_MAX,
+  VERGROESZERUNG_MAX,
   ZOOM_MIN,
+  berechneZoomMax,
   ZOOM_STUFE,
   begrenzeVerschiebung,
   begrenzeZoom,
@@ -57,6 +58,9 @@ function gleich(a: number, b: number, toleranz = 0.001): boolean {
 const SEITE: Masze = { breite: 1190.5, hoehe: 842 }
 const FLAECHE: Masze = { breite: 1200, hoehe: 700 }
 
+/** Obergrenze fuer die Abschnitte, die sie nicht selbst pruefen. */
+const ZOOM_MAX_TEST = 8
+
 console.log('')
 console.log('1. Einpassen')
 
@@ -93,7 +97,7 @@ let stand: Ansicht = { ...ANSICHT_START }
 const vorher = inBuehne(stand, ZEIGER)
 
 for (const faktor of [1.25, 1.25, 1.08, 2, 1 / 1.4, 1.9]) {
-  stand = zoomeAufPunkt(stand, ZEIGER, faktor)
+  stand = zoomeAufPunkt(stand, ZEIGER, faktor, ZOOM_MAX_TEST)
   const jetzt = inBuehne(stand, ZEIGER)
   if (
     !melde(
@@ -109,11 +113,11 @@ for (const faktor of [1.25, 1.25, 1.08, 2, 1 / 1.4, 1.9]) {
 // Auch an der Obergrenze: der abgeschnittene Rest darf das Bild nicht
 // zusaetzlich verschieben. Genau deshalb wird das Verhaeltnis erst *nach* dem
 // Begrenzen gebildet.
-let anGrenze: Ansicht = { zoom: ZOOM_MAX, x: -400, y: -260 }
+let anGrenze: Ansicht = { zoom: ZOOM_MAX_TEST, x: -400, y: -260 }
 const vorGrenze = inBuehne(anGrenze, ZEIGER)
-anGrenze = zoomeAufPunkt(anGrenze, ZEIGER, 4)
+anGrenze = zoomeAufPunkt(anGrenze, ZEIGER, 4, ZOOM_MAX_TEST)
 const nachGrenze = inBuehne(anGrenze, ZEIGER)
-melde(anGrenze.zoom === ZOOM_MAX, 'Obergrenze wird nicht ueberschritten', `${anGrenze.zoom}`)
+melde(anGrenze.zoom === ZOOM_MAX_TEST, 'Obergrenze wird nicht ueberschritten', `${anGrenze.zoom}`)
 melde(
   gleich(vorGrenze.x, nachGrenze.x) && gleich(vorGrenze.y, nachGrenze.y),
   'an der Obergrenze verschiebt sich nichts mehr',
@@ -124,8 +128,8 @@ console.log('')
 console.log('3. Hin und zurueck landet wieder am Anfang')
 
 let hinUndZurueck: Ansicht = { ...ANSICHT_START }
-for (let i = 0; i < 10; i++) hinUndZurueck = zoomeAufPunkt(hinUndZurueck, ZEIGER, ZOOM_STUFE)
-for (let i = 0; i < 10; i++) hinUndZurueck = zoomeAufPunkt(hinUndZurueck, ZEIGER, 1 / ZOOM_STUFE)
+for (let i = 0; i < 10; i++) hinUndZurueck = zoomeAufPunkt(hinUndZurueck, ZEIGER, ZOOM_STUFE, ZOOM_MAX_TEST)
+for (let i = 0; i < 10; i++) hinUndZurueck = zoomeAufPunkt(hinUndZurueck, ZEIGER, 1 / ZOOM_STUFE, ZOOM_MAX_TEST)
 melde(
   gleich(hinUndZurueck.zoom, 1, 0.0001),
   'zehnmal hinein und wieder heraus ergibt Zoom 1',
@@ -137,9 +141,9 @@ melde(
   `${hinUndZurueck.x.toFixed(4)}/${hinUndZurueck.y.toFixed(4)}`
 )
 
-melde(begrenzeZoom(0.2) === ZOOM_MIN, 'Untergrenze greift', `${begrenzeZoom(0.2)}`)
-melde(begrenzeZoom(99) === ZOOM_MAX, 'Obergrenze greift', `${begrenzeZoom(99)}`)
-melde(begrenzeZoom(Number.NaN) === ZOOM_MIN, 'unbrauchbarer Wert faellt auf die Untergrenze')
+melde(begrenzeZoom(0.2, ZOOM_MAX_TEST) === ZOOM_MIN, 'Untergrenze greift', `${begrenzeZoom(0.2, ZOOM_MAX_TEST)}`)
+melde(begrenzeZoom(999, ZOOM_MAX_TEST) === ZOOM_MAX_TEST, 'Obergrenze greift', `${begrenzeZoom(999, ZOOM_MAX_TEST)}`)
+melde(begrenzeZoom(Number.NaN, ZOOM_MAX_TEST) === ZOOM_MIN, 'unbrauchbarer Wert faellt auf die Untergrenze')
 
 console.log('')
 console.log('4. Der Plan laesst sich nicht aus dem Bild schieben')
@@ -262,7 +266,7 @@ melde(gleich(geraeteDichte(2), 2), 'doppelte Punktdichte bleibt erhalten')
 // Der springende Punkt: ein Buehnenpunkt bekommt zoom * dichte Bildpunkte -
 // damit entspricht ein Bildpunkt genau einem Geraetepunkt. Frueher wurde die
 // ganze Seite gezeichnet und deshalb bei 800 % auf ein Drittel gekuerzt.
-for (const zoom of [1, 2, 4, ZOOM_MAX]) {
+for (const zoom of [1, 2, 4, ZOOM_MAX_TEST]) {
   const stelle = begrenzeVerschiebung(
     { zoom, x: -buehne.breite * zoom * 0.3, y: -buehne.hoehe * zoom * 0.3 },
     buehne,
@@ -290,7 +294,69 @@ const uebergrosz = berechneScharfMassstab(8, 2, { breite: 3370, hoehe: 2384 })
 melde(uebergrosz < 16, 'ein uebergroszes Fenster wird gekuerzt statt leer geliefert', `${uebergrosz}`)
 
 console.log('')
-console.log('8. Verlauf der Zeichenentscheidungen')
+console.log('8. Obergrenze des Zooms zaehlt in natuerlicher Groesze')
+
+// Der Fall, an dem es aufgefallen ist: ein Plan von 195 x 84 cm auf einem
+// Notebook. Mit einer festen Grenze von 8 kam man auf 132 % natuerliche
+// Groesze - in Acrobat stand bei derselben Beschriftung "800 %" das
+// Sechsfache. Verglichen wurden zwei voellig verschiedene Vergroeszerungen.
+const GROSZER_PLAN: Masze = { breite: 5525, hoehe: 2384 }
+const NOTEBOOK: Masze = { breite: 934, hoehe: 595 }
+const einpassGrosz = berechneEinpassung(GROSZER_PLAN, NOTEBOOK)!
+melde(gleich(einpassGrosz, 0.1647, 0.0005), 'Einpassmaszstab des groszen Plans', `${einpassGrosz}`)
+
+const maxGrosz = berechneZoomMax(einpassGrosz)
+melde(
+  gleich(maxGrosz * einpassGrosz, VERGROESZERUNG_MAX, 0.01),
+  `grosze Seite: Obergrenze erreicht ${VERGROESZERUNG_MAX * 100} % natuerliche Groesze`,
+  `${(maxGrosz * einpassGrosz * 100).toFixed(0)} %`
+)
+melde(maxGrosz > 40, 'und liegt damit deutlich ueber der alten festen 8', `${maxGrosz.toFixed(1)}`)
+
+// Gegenprobe: eine Seite, die ohnehin fast in natuerlicher Groesze dasteht,
+// darf dadurch nicht *weniger* Zoom bekommen als vorher.
+const einpassA3 = berechneEinpassung(SEITE, FLAECHE)!
+melde(
+  berechneZoomMax(einpassA3) >= 8,
+  'kleine Seite behaelt mindestens das achtfache Einpassen',
+  `${berechneZoomMax(einpassA3).toFixed(2)}`
+)
+melde(berechneZoomMax(null) === 8, 'ohne Einpassmaszstab bleibt es bei 8')
+melde(berechneZoomMax(0) === 8, 'ein Einpassmaszstab von null ergibt keine Division durch null')
+
+// Das Entscheidende: mehr Zoom kostet nichts. Das Fenster schrumpft mit
+// steigendem Maszstab, das Bitmap bleibt gleich grosz.
+const buehneGrosz: Masze = {
+  breite: GROSZER_PLAN.breite * einpassGrosz,
+  hoehe: GROSZER_PLAN.hoehe * einpassGrosz,
+}
+let vorigeFlaeche = 0
+for (const zoom of [8, 16, 32, maxGrosz]) {
+  const a: Ansicht = {
+    zoom,
+    x: -buehneGrosz.breite * zoom * 0.4,
+    y: -buehneGrosz.hoehe * zoom * 0.4,
+  }
+  const f = berechneSichtfenster(a, buehneGrosz, NOTEBOOK)
+  const m = berechneScharfMassstab(zoom, 2, f)
+  const bildpunkte = f.breite * m * f.hoehe * m
+  if (vorigeFlaeche > 0) {
+    melde(
+      Math.abs(bildpunkte - vorigeFlaeche) / vorigeFlaeche < 0.02,
+      `bei ${(zoom * einpassGrosz * 100).toFixed(0)} % natuerlich bleibt das Bitmap gleich grosz`,
+      `${(bildpunkte / 1e6).toFixed(2)} statt ${(vorigeFlaeche / 1e6).toFixed(2)} Megapunkte`
+    )
+  }
+  vorigeFlaeche = bildpunkte
+  melde(
+    gleich(m, zoom * 2, 0.0001),
+    `  und wird bei ${(zoom * einpassGrosz * 100).toFixed(0)} % punktgenau gezeichnet`,
+    `${m.toFixed(2)} statt ${(zoom * 2).toFixed(2)}`
+  )
+}
+
+console.log('')
+console.log('9. Verlauf der Zeichenentscheidungen')
 
 // Der Verlauf ist das Werkzeug, mit dem sich "der Plan ist unscharf" in eine
 // beantwortbare Frage verwandelt. Wenn er ueberlaeuft oder Wiederholungen
@@ -317,7 +383,7 @@ melde(
 const auszug = alsText(
   {
     stand: 'abc1234', gebaut: '15.08.2026',
-    seite: { breite: 2384, hoehe: 1684 }, einpass: 0.4964, zoom: 8,
+    seite: { breite: 2384, hoehe: 1684 }, einpass: 0.4964, zoom: 8, zoomMax: 16.1,
     verschiebung: { x: -3054, y: -2613 },
     flaeche: { breite: 1400, hoehe: 860 }, punktdichte: 1,
     grundBitmap: { breite: 1183, hoehe: 836 },

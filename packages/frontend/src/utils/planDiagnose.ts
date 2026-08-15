@@ -56,6 +56,8 @@ export interface PlanDiagnose {
   seite: Masze | null
   einpass: number | null
   zoom: number
+  /** Obergrenze des Zooms - haengt am Einpassmaszstab, siehe berechneZoomMax. */
+  zoomMax: number | null
   verschiebung: { x: number; y: number }
   flaeche: Masze | null
   punktdichte: number
@@ -103,7 +105,15 @@ export function alsText(d: PlanDiagnose, jetzt: number): string {
     `Stand        ${d.stand} · ${d.gebaut}`,
     `Browser      Punktdichte ${d.punktdichte} · Fläche ${masze(d.flaeche)}`,
     `Seite        ${masze(d.seite)} pt · Einpassmaßstab ${zahl(d.einpass, 4)}`,
-    `Ansicht      Zoom ${zahl(d.zoom)} · Verschiebung ${d.verschiebung.x.toFixed(0)} / ${d.verschiebung.y.toFixed(0)}`,
+    // Beide Zaehlweisen nebeneinander: `zoom` zaehlt in Vielfachen des
+    // Einpassens, die Anzeige in natuerlicher Groesze. Dass beide einmal
+    // "800 %" hieszen und Verschiedenes meinten, hat eine Fehlersuche gekostet.
+    `Ansicht      ${
+      d.einpass ? `${(d.zoom * d.einpass * 100).toFixed(0)} % natürliche Größe` : '–'
+    } (Zoom ${zahl(d.zoom)} × Einpassmaßstab)`,
+    `             Verschiebung ${d.verschiebung.x.toFixed(0)} / ${d.verschiebung.y.toFixed(0)}${
+      d.zoomMax ? ` · Obergrenze ${(d.zoomMax * (d.einpass ?? 1) * 100).toFixed(0)} %` : ''
+    }`,
     '',
     `Grundebene   Bitmap ${masze(d.grundBitmap)}`,
     `Scharfebene  sichtbar: ${d.scharf.sichtbar ? 'ja' : 'NEIN'}`,

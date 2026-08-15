@@ -23,7 +23,38 @@
 export const EINPASS_LUFT_PX = 24
 
 export const ZOOM_MIN = 1
-export const ZOOM_MAX = 8
+
+/**
+ * Hoechste Vergroeszerung, bezogen auf die *natuerliche* Groesze der Seite.
+ * 8 heiszt also 800 % - dasselbe, was Acrobat unter 800 % versteht.
+ */
+export const VERGROESZERUNG_MAX = 8
+
+/** Untergrenze der Obergrenze: mindestens achtfach eingepasst. */
+const ZOOM_MAX_MINDESTENS = 8
+
+/**
+ * Wie weit sich hineinzoomen laesst.
+ *
+ * `zoom` zaehlt in Vielfachen des Einpassens - das ist fuer die Rechnung
+ * richtig, taugt aber nicht als Obergrenze. Ein fester Wert von 8 bedeutet bei
+ * einer A4-Seite (Einpassmaszstab um 1) rund 800 % natuerliche Groesze, bei
+ * einem Plan von 195 x 84 cm (Einpassmaszstab 0,165) aber nur **132 %**.
+ *
+ * Genau daran ist eine Fehlersuche gescheitert: in der Anwendung stand "800 %"
+ * und in Acrobat stand "800 %", gemeint war aber das 6,1-fache. Der Plan liesz
+ * sich schlicht nicht weit genug vergroeszern, und was man sah, wirkte
+ * verwaschen.
+ *
+ * Die Grenze zaehlt deshalb in natuerlicher Groesze. Kosten entstehen dabei
+ * keine: die Scharfebene zeichnet nur den sichtbaren Ausschnitt, und der wird
+ * mit steigendem Zoom kleiner. Das Bitmap bleibt bei jedem Maszstab gleich
+ * grosz - nachgerechnet bei 16,6 MB von 100 % bis 1054 %.
+ */
+export function berechneZoomMax(einpassMassstab: number | null): number {
+  if (!einpassMassstab || einpassMassstab <= 0) return ZOOM_MAX_MINDESTENS
+  return Math.max(ZOOM_MAX_MINDESTENS, VERGROESZERUNG_MAX / einpassMassstab)
+}
 
 /** Stufe eines Tastendrucks oder eines Knopfes in der Leiste. */
 export const ZOOM_STUFE = 1.25
@@ -45,9 +76,9 @@ export interface Ansicht {
 
 export const ANSICHT_START: Ansicht = { zoom: 1, x: 0, y: 0 }
 
-export function begrenzeZoom(wert: number): number {
+export function begrenzeZoom(wert: number, zoomMax: number): number {
   if (!Number.isFinite(wert)) return ZOOM_MIN
-  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, wert))
+  return Math.min(zoomMax, Math.max(ZOOM_MIN, wert))
 }
 
 /**
@@ -90,9 +121,10 @@ export function berechneEinpassung(seite: Masze, flaeche: Masze): number | null 
 export function zoomeAufPunkt(
   ansicht: Ansicht,
   punkt: { x: number; y: number },
-  faktor: number
+  faktor: number,
+  zoomMax: number
 ): Ansicht {
-  const neuerZoom = begrenzeZoom(ansicht.zoom * faktor)
+  const neuerZoom = begrenzeZoom(ansicht.zoom * faktor, zoomMax)
   const k = neuerZoom / ansicht.zoom
   return {
     zoom: neuerZoom,
