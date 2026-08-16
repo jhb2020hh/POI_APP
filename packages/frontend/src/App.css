@@ -802,9 +802,6 @@ textarea {
   background: var(--color-surface-hover, #f1f1f1);
 }
 
-/* Nimmt die Kneif- und Strg+Rad-Geste entgegen und muss dafuer die ganze
-   Flaeche abdecken - auch neben einem herausgezoomten Plan. */
-.plan-gestenrahmen,
 .plan-viewport {
   width: 100%;
   height: 100%;

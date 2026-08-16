@@ -42,7 +42,12 @@ import { ViewportPluginPackage, Viewport } from '@embedpdf/plugin-viewport/react
 import { ScrollPluginPackage, Scroller, type PageLayout } from '@embedpdf/plugin-scroll/react'
 import { RenderPluginPackage, RenderLayer } from '@embedpdf/plugin-render/react'
 import { TilingPluginPackage, TilingLayer } from '@embedpdf/plugin-tiling/react'
-import { ZoomPluginPackage, ZoomMode, useZoom, useZoomGesture } from '@embedpdf/plugin-zoom/react'
+import {
+  ZoomPluginPackage,
+  ZoomMode,
+  ZoomGestureWrapper,
+  useZoom,
+} from '@embedpdf/plugin-zoom/react'
 import { InteractionManagerPluginPackage } from '@embedpdf/plugin-interaction-manager/react'
 import { PanPluginPackage } from '@embedpdf/plugin-pan/react'
 import wasmPfad from '@embedpdf/pdfium/pdfium.wasm?url'
@@ -256,10 +261,6 @@ function Buehne({
   const seitenImDokument = activeDocument?.document?.pageCount ?? null
 
   const { state: zoomStand, provides: zoom } = useZoom(dokumentId)
-  // Kneifen auf dem Trackpad und Strg+Rad. Der Verweis gehoert auf den
-  // Rahmen um die Ansicht, nicht auf das Blatt: neben einem herausgezoomten
-  // Plan kaeme er sonst gar nicht an, und der Browser zoomte die ganze Seite.
-  const { elementRef: gestenRef } = useZoomGesture(dokumentId)
 
   const [diagnose, setDiagnose] = useState<PlanDiagnose | null>(null)
   const rahmenRef = useRef<HTMLDivElement>(null)
@@ -414,8 +415,14 @@ function Buehne({
 
   return (
     <div className="plan-flaeche plan-flaeche-neu" ref={rahmenRef}>
-      <div ref={gestenRef} className="plan-gestenrahmen">
-        <Viewport documentId={dokumentId} className="plan-viewport">
+      <Viewport documentId={dokumentId} className="plan-viewport">
+        {/* Kneifen auf dem Trackpad und Strg+Rad.
+            Der Rahmen gehoert *hier* hinein und nicht um den Viewport herum:
+            der Baustein lauscht auf dem Viewport (den er sich selbst holt) und
+            rechnet den Zoompunkt gegen den Inhalt, auf dem er sitzt. Auszen
+            angebracht kam die Geste nicht an - der Browser zoomte stattdessen
+            die ganze Seite. */}
+        <ZoomGestureWrapper documentId={dokumentId}>
           <Scroller
             documentId={dokumentId}
             renderPage={(seite: PageLayout) => (
@@ -442,8 +449,8 @@ function Buehne({
               </div>
             )}
           />
-        </Viewport>
-      </div>
+        </ZoomGestureWrapper>
+      </Viewport>
 
       <div className="pdf-zoom-toolbar" onPointerDown={(e) => e.stopPropagation()}>
         <button
