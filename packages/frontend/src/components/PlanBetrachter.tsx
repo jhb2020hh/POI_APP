@@ -396,10 +396,21 @@ function Buehne({
             left: `${point.x * 100}%`,
             top: `${point.y * 100}%`,
             background: color,
-            // Gegen den Zoom gerechnet: die Nadel behaelt ihre Groesze auf dem
-            // Bildschirm. Ohne das waere sie bei 800 % so grosz wie ein halber
-            // Raum und verdeckte, worauf sie zeigt.
-            transform: `translate(-50%, -100%) scale(${(gewaehlt ? 1.25 : 1) / Math.max(massstab, 0.01)})`,
+            // *Keine* Gegenrechnung zum Zoom.
+            //
+            // EmbedPDF skaliert nicht per transform, sondern liefert
+            // `renderPage` einen Rahmen, dessen Masze bereits in fertigen
+            // Bildpunkten stehen - 917 px bei 17 %, 44200 px bei 800 %. Ein
+            // Kind mit fester Punktgroesze behaelt seine Bildschirmgroesze
+            // damit von selbst.
+            //
+            // Hier stand einmal `/ massstab`, uebernommen aus dem alten
+            // Betrachter. Dort war es richtig: dessen Buehne lag unter
+            // transform: scale(zoom), also musste die Nadel gegensteuern.
+            // Hier verdreht dieselbe Zeile die Groesze in beide Richtungen -
+            // bei 14 % wurde die Nadel siebenfach zu grosz und verdeckte den
+            // halben Plan, bei 800 % schrumpfte sie auf drei Punkte.
+            transform: `translate(-50%, -100%) scale(${gewaehlt ? 1.25 : 1})`,
             borderColor: gewaehlt ? '#1a73e8' : '#fff',
             boxShadow: gewaehlt
               ? '0 0 0 3px rgba(26, 115, 232, 0.45), 0 1px 4px rgba(0,0,0,0.35)'
