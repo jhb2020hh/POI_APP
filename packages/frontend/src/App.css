@@ -805,6 +805,21 @@ textarea {
 .plan-viewport {
   width: 100%;
   height: 100%;
+  /* Senkrecht mittig, solange der Plan kleiner als das Fenster ist.
+     EmbedPDF zentriert nur waagerecht (margin: 0 auto), senkrecht klebte der
+     Plan oben - bei einem breiten, flachen Plan mit einem groszen leeren Band
+     darunter.
+
+     Das ist nicht nur haesslich, es kostet Genauigkeit beim Zoomen: solange
+     der Inhalt kleiner als das Fenster ist, gibt es keinen Bildlauf, mit dem
+     sich der Punkt unter dem Zeiger halten liesze. Oben angeschlagen waechst
+     der Plan nur nach unten, und der Fehler des ersten Zoomschritts wird beim
+     Weiterzoomen mitvergroeszert. Mittig waechst er nach beiden Seiten, und
+     der Fehler faellt entsprechend kleiner aus.
+
+     `safe` sorgt dafuer, dass bei groszem Zoom nichts oben abgeschnitten wird;
+     Browser ohne Unterstuetzung bleiben beim bisherigen Verhalten. */
+  align-content: safe center;
 }
 
 /* Der Bezugsrahmen der Nadeln: sie sitzen in Prozent darin. */

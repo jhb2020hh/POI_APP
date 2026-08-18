@@ -38,7 +38,11 @@ import {
   DocumentManagerPluginPackage,
   useActiveDocument,
 } from '@embedpdf/plugin-document-manager/react'
-import { ViewportPluginPackage, Viewport } from '@embedpdf/plugin-viewport/react'
+import {
+  ViewportPluginPackage,
+  Viewport,
+  useViewportElement,
+} from '@embedpdf/plugin-viewport/react'
 import { ScrollPluginPackage, Scroller, type PageLayout } from '@embedpdf/plugin-scroll/react'
 import { RenderPluginPackage, RenderLayer } from '@embedpdf/plugin-render/react'
 import { TilingPluginPackage, TilingLayer } from '@embedpdf/plugin-tiling/react'
@@ -56,7 +60,7 @@ import { getToken } from '../api/client'
 import { Zeichen } from './Zeichen'
 import { PlanDiagnoseDialog } from './PlanDiagnoseDialog'
 import type { Inhaltsbefund, PlanDiagnose } from '../utils/planDiagnose'
-import { geraeteDichte } from '../utils/planAnsicht'
+import { geraeteDichte, radZuFaktor } from '../utils/planAnsicht'
 
 const FALLBACK_COLOR = '#888888'
 const FALLBACK_GLYPH = '!'
@@ -234,6 +238,126 @@ export function PlanBetrachter(props: PlanBetrachterProps) {
       <Buehne {...props} />
     </EmbedPDF>
   )
+}
+
+/**
+ * Zoomen mit dem Rad, und zwar auf den Punkt unter dem Zeiger.
+ *
+ * Warum nicht die mitgelieferte Radbehandlung: `ZoomGestureWrapper` blendet
+ * absichtlich zwischen zwei Ankern. Solange die Seite den Ausschnitt nicht
+ * deutlich ueberragt, zoomt es auf die *Mitte*; erst wenn sie ihn um 30 % der
+ * Breite ueberragt, folgt es ganz dem Zeiger:
+ *
+ *   blend = min(1, max(0, finalWidth - layoutWidth) / (layoutWidth * 0.3))
+ *   tx    = txCenter + (txMouse - txCenter) * blend
+ *
+ * Bei einem breiten Plan, der eingepasst genau die Breite fuellt, ist das ueber
+ * die ersten Stufen praktisch reines Mittelzoomen - und genau das wurde
+ * beanstandet.
+ *
+ * Das Zoom-Plugin kann es exakt, es wird aus dem Rad-Pfad nur nicht so
+ * benutzt: `requestZoom(stufe, { vx, vy })` haelt genau diesen Punkt fest und
+ * rechnet die noetige Bildlaufposition selbst aus. `vx`/`vy` zaehlen von der
+ * linken oberen Ecke des Viewports.
+ *
+ * Der Baustein muss *innerhalb* des Viewports haengen: `useViewportElement`
+ * bekommt den Verweis nur von dort. Er zeichnet nichts.
+ */
+function RadZoom({ documentId }: { documentId: string }) {
+  const viewportRef = useViewportElement()
+  const { provides: zoom } = useZoom(documentId)
+
+  /**
+   * Haelt den Punkt unter dem Zeiger fest - an der tatsaechlichen Geometrie.
+   *
+   * Das Zoom-Plugin rechnet die Zielposition selbst aus und setzt sie auch.
+   * Zwei Dinge stehen dem im Weg, beide gemessen:
+   *
+   *  1. *Zu frueh.* Zum Zeitpunkt der Anfrage steht das Blatt noch in alter
+   *     Groesze; der Behaelter ist noch gar nicht so weit scrollbar, und die
+   *     Zuweisung wird vom Browser auf das alte Maximum gekappt - bei einer
+   *     eingepassten Seite auf 0. Der Inhalt wuchs auf 2274 x 999 in einem
+   *     Ausschnitt von 940 x 806, scrollLeft und scrollTop blieben beide 0.
+   *     EmbedPDFs eigener Gestenpfad faellt nicht darauf herein, weil er
+   *     waehrend der Geste eine CSS-Skalierung anlegt - dadurch ist der
+   *     Behaelter bereits scrollbar, bevor uebernommen wird.
+   *
+   *  2. *Falsche Annahme.* `computeScrollForZoomChange` rechnet damit, dass
+   *     ein Inhalt, der kleiner als der Ausschnitt ist, in beiden Achsen
+   *     mittig sitzt. Im DOM steht er aber oben - zentriert wird ueber
+   *     `margin: 0 auto`, und das wirkt nur waagerecht. Bei einem breiten,
+   *     flachen Plan ist der senkrechte Fehler entsprechend grosz: waagerecht
+   *     stimmte es auf 2 px, senkrecht wich es um bis zu 13835 px ab.
+   *
+   * Deshalb wird hier nicht nachgerechnet, sondern nachgemessen: welcher Punkt
+   * des Blattes lag unter dem Zeiger, und wo liegt er nach dem Umbruch? Die
+   * Differenz geht auf den Bildlauf. Das kommt ohne jede Annahme ueber
+   * Zentrierung, Innenabstand und Seitenluecken aus.
+   *
+   * Das Ereignis kommt noch *vor* dem Umbruch - der Zustand ist gesetzt, das
+   * DOM aber noch alt. Genau richtig, um den Bezugspunkt zu nehmen.
+   */
+  useEffect(() => {
+    if (!zoom) return
+    return zoom.onZoomChange((e) => {
+      const el = viewportRef?.current
+      if (!el) return
+      const blatt = el.querySelector<HTMLElement>('.plan-seite')
+      if (!blatt) return
+
+      const vorher = blatt.getBoundingClientRect()
+      if (vorher.width <= 0 || vorher.height <= 0) return
+
+      // Der festzuhaltende Punkt, einmal in Bildschirm- und einmal in
+      // Blattkoordinaten (Anteile, also vom Maszstab unabhaengig).
+      const ausschnitt = el.getBoundingClientRect()
+      const zielX = ausschnitt.left + e.center.vx
+      const zielY = ausschnitt.top + e.center.vy
+      const u = (zielX - vorher.left) / vorher.width
+      const v = (zielY - vorher.top) / vorher.height
+
+      const ziehNach = (versuche: number) => {
+        const jetzt = blatt.getBoundingClientRect()
+        if (jetzt.width <= 0 || jetzt.height <= 0) return
+        const abweichungX = jetzt.left + u * jetzt.width - zielX
+        const abweichungY = jetzt.top + v * jetzt.height - zielY
+        if (Math.abs(abweichungX) > 0.5) el.scrollLeft += abweichungX
+        if (Math.abs(abweichungY) > 0.5) el.scrollTop += abweichungY
+        // Der Umbruch braucht je nach Last mehrere Bilder; bis dahin bleibt
+        // eine Abweichung stehen. Danach sitzt die erste Korrektur.
+        if (versuche > 0) window.requestAnimationFrame(() => ziehNach(versuche - 1))
+      }
+      window.requestAnimationFrame(() => ziehNach(4))
+    })
+  }, [zoom, viewportRef])
+
+  useEffect(() => {
+    const el = viewportRef?.current
+    if (!el || !zoom) return
+
+    function beiRad(e: WheelEvent) {
+      // Ohne Strg ist es Schwenken - das erledigt der Bildlauf des Viewports.
+      // Ein Kneifen auf dem Trackpad meldet der Browser als Rad mit gedruecktem
+      // Strg und landet deshalb hier.
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+
+      const rechteck = (el as HTMLDivElement).getBoundingClientRect()
+      const jetzt = zoom!.getState().currentZoomLevel
+      // radZuFaktor rechnet stufenlos, behandelt Firefox' Zeilen-deltaMode und
+      // deckelt die Ausreiszer mancher Maustreiber. Ohne das wird ein
+      // Trackpad-Kneifen zum Sprung statt zu einer Bewegung.
+      zoom!.requestZoom(jetzt * radZuFaktor(e.deltaY, e.deltaMode), {
+        vx: e.clientX - rechteck.left,
+        vy: e.clientY - rechteck.top,
+      })
+    }
+
+    el.addEventListener('wheel', beiRad, { passive: false })
+    return () => el.removeEventListener('wheel', beiRad)
+  }, [viewportRef, zoom])
+
+  return null
 }
 
 /**
@@ -427,13 +551,15 @@ function Buehne({
   return (
     <div className="plan-flaeche plan-flaeche-neu" ref={rahmenRef}>
       <Viewport documentId={dokumentId} className="plan-viewport">
-        {/* Kneifen auf dem Trackpad und Strg+Rad.
-            Der Rahmen gehoert *hier* hinein und nicht um den Viewport herum:
-            der Baustein lauscht auf dem Viewport (den er sich selbst holt) und
-            rechnet den Zoompunkt gegen den Inhalt, auf dem er sitzt. Auszen
-            angebracht kam die Geste nicht an - der Browser zoomte stattdessen
-            die ganze Seite. */}
-        <ZoomGestureWrapper documentId={dokumentId}>
+        {/* Zoomen mit dem Rad - auf den Punkt unter dem Zeiger. Siehe RadZoom. */}
+        <RadZoom documentId={dokumentId} />
+        {/* Zweifingergeste auf Touchgeraeten. Der Rahmen gehoert *hier* hinein
+            und nicht um den Viewport herum: der Baustein lauscht auf dem
+            Viewport (den er sich selbst holt) und rechnet gegen den Inhalt, auf
+            dem er sitzt. Auszen angebracht kam die Geste nicht an.
+            Das Rad ist ihm abgenommen, weil er dabei zwischen Mitte und Zeiger
+            blendet statt dem Zeiger zu folgen. */}
+        <ZoomGestureWrapper documentId={dokumentId} enableWheel={false}>
           <Scroller
             documentId={dokumentId}
             renderPage={(seite: PageLayout) => (
